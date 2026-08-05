@@ -110,10 +110,6 @@ export default function Dashboard() {
         )}
 
         {!isLoading && !isError && bridge && (
-          <DetailedTables params={params} enabled={pairAvailable} />
-        )}
-
-        {!isLoading && !isError && bridge && (
           <main className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-6 flex flex-col animate-in fade-in slide-in-from-bottom-8 duration-700 delay-150 fill-mode-both">
             <div className="mb-8 px-4 pt-4 sm:p-0 flex flex-col sm:flex-row sm:justify-between sm:items-end">
               <div>
@@ -130,6 +126,10 @@ export default function Dashboard() {
               />
             </div>
           </main>
+        )}
+
+        {!isLoading && !isError && bridge && (
+          <DetailedTables params={params} enabled={pairAvailable} />
         )}
       </div>
 
