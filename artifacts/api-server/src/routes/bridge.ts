@@ -3,10 +3,9 @@ import { and, asc, eq } from "drizzle-orm";
 import {
   db,
   scenariosTable,
-  fatoBridgeDetalheTable,
-  BRIDGE_DRIVERS,
-  type Scenario,
-  type FatoBridgeDetalhe,
+  bridgesTable,
+  bridgeComponentsTable,
+  bridgeDetailLinesTable,
 } from "@workspace/db";
 import {
   GetBridgeResponse,
@@ -19,106 +18,66 @@ import {
 const router: IRouter = Router();
 
 const UNIT = "MUSD";
-const DEFAULT_SOURCE = "fy26_budget";
-const DEFAULT_TARGET = "fy26_mrf7";
 
 function firstStr(v: unknown): string | undefined {
   if (Array.isArray(v)) v = v[0];
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
-async function loadScenarios(): Promise<Scenario[]> {
-  return db.select().from(scenariosTable).orderBy(asc(scenariosTable.sortOrder));
-}
-
 /**
- * Resolve source/target scenarios. Missing params fall back to the default
- * pair (FY26 Budget → FY26 MRF7 when present, else first two scenarios).
+ * Resolve the bridge for the requested source/target pair.
+ * Missing params fall back to the default bridge.
  */
-async function resolvePair(source?: string, target?: string) {
-  const scenarios = await loadScenarios();
-  if (scenarios.length < 2) return undefined;
-  const byId = new Map(scenarios.map((s) => [s.id, s]));
-  const defSource = byId.get(DEFAULT_SOURCE) ?? scenarios[0];
-  const defTarget = byId.get(DEFAULT_TARGET) ?? scenarios[1];
-  const src = source ? byId.get(source) : defSource;
-  const tgt = target ? byId.get(target) : defTarget;
-  if (!src || !tgt) return undefined;
-  return { src, tgt, scenarios };
-}
-
-async function loadFacts(s: Scenario): Promise<FatoBridgeDetalhe[]> {
-  return db
+async function resolveBridge(source?: string, target?: string) {
+  const [def] = await db
     .select()
-    .from(fatoBridgeDetalheTable)
+    .from(bridgesTable)
+    .where(eq(bridgesTable.isDefault, true))
+    .limit(1);
+
+  // Each missing param falls back independently to the default bridge's value.
+  const effectiveSource = source ?? def?.sourceScenarioId;
+  const effectiveTarget = target ?? def?.targetScenarioId;
+  if (!effectiveSource || !effectiveTarget) return undefined;
+
+  if (
+    def &&
+    def.sourceScenarioId === effectiveSource &&
+    def.targetScenarioId === effectiveTarget
+  ) {
+    return def;
+  }
+
+  const [bridge] = await db
+    .select()
+    .from(bridgesTable)
     .where(
       and(
-        eq(fatoBridgeDetalheTable.versao, s.version),
-        eq(fatoBridgeDetalheTable.periodo, s.period),
+        eq(bridgesTable.sourceScenarioId, effectiveSource),
+        eq(bridgesTable.targetScenarioId, effectiveTarget),
       ),
     );
+  return bridge;
 }
 
-type DriverDelta = {
-  key: string;
-  label: string;
-  value: number;
-};
-
-/**
- * Compute the bridge between two scenarios from absolute facts:
- * driver delta = sum(target items, padrao+ajuste) − sum(source items).
- */
-async function computeBridge(src: Scenario, tgt: Scenario) {
-  const [srcFacts, tgtFacts] = await Promise.all([loadFacts(src), loadFacts(tgt)]);
-  if (srcFacts.length === 0 || tgtFacts.length === 0) return undefined;
-
-  const sumByDriver = (facts: FatoBridgeDetalhe[]) => {
-    const m = new Map<string, number>();
-    for (const f of facts) m.set(f.driver, (m.get(f.driver) ?? 0) + f.valorMusd);
-    return m;
-  };
-  const srcByDriver = sumByDriver(srcFacts);
-  const tgtByDriver = sumByDriver(tgtFacts);
-
-  const total = (facts: FatoBridgeDetalhe[]) =>
-    facts.reduce((s, f) => s + f.valorMusd, 0);
-
-  const driverKeys = new Set([...srcByDriver.keys(), ...tgtByDriver.keys()]);
-  const known = BRIDGE_DRIVERS.filter((d) => driverKeys.has(d.key)).map(
-    (d) => ({ key: d.key, label: d.label }) as { key: string; label: string },
-  );
-  const unknown = [...driverKeys]
-    .filter((k) => !BRIDGE_DRIVERS.some((d) => d.key === k))
-    .sort()
-    .map((k) => ({ key: k, label: k }));
-
-  const deltas: DriverDelta[] = [...known, ...unknown].map((d) => ({
-    key: d.key,
-    label: d.label,
-    value: (tgtByDriver.get(d.key) ?? 0) - (srcByDriver.get(d.key) ?? 0),
-  }));
-
-  return {
-    startValue: total(srcFacts),
-    endValue: total(tgtFacts),
-    deltas,
-    srcFacts,
-    tgtFacts,
-  };
+async function loadComponents(bridgeId: number) {
+  return db
+    .select()
+    .from(bridgeComponentsTable)
+    .where(eq(bridgeComponentsTable.bridgeId, bridgeId))
+    .orderBy(asc(bridgeComponentsTable.sortOrder));
 }
 
 router.get("/scenarios", async (_req, res): Promise<void> => {
-  const scenarios = await loadScenarios();
-  if (scenarios.length < 2) {
-    res.status(404).json({ error: "Nenhum cenário importado" });
+  const [scenarios, bridges] = await Promise.all([
+    db.select().from(scenariosTable).orderBy(asc(scenariosTable.sortOrder)),
+    db.select().from(bridgesTable),
+  ]);
+  const def = bridges.find((b) => b.isDefault) ?? bridges[0];
+  if (!def) {
+    res.status(404).json({ error: "Nenhum bridge importado" });
     return;
   }
-  const byId = new Map(scenarios.map((s) => [s.id, s]));
-  // Any source/target combination is valid now — bridges are computed on demand.
-  const pairs = scenarios.flatMap((s) =>
-    scenarios.filter((t) => t.id !== s.id).map((t) => ({ sourceId: s.id, targetId: t.id })),
-  );
   res.json(
     ListScenariosResponse.parse({
       scenarios: scenarios.map((s) => ({
@@ -127,63 +86,55 @@ router.get("/scenarios", async (_req, res): Promise<void> => {
         period: s.period,
         label: s.label,
       })),
-      pairs,
+      pairs: bridges.map((b) => ({
+        sourceId: b.sourceScenarioId,
+        targetId: b.targetScenarioId,
+      })),
       defaultPair: {
-        sourceId: (byId.get(DEFAULT_SOURCE) ?? scenarios[0]).id,
-        targetId: (byId.get(DEFAULT_TARGET) ?? scenarios[1]).id,
+        sourceId: def.sourceScenarioId,
+        targetId: def.targetScenarioId,
       },
     }),
   );
 });
 
 router.get("/bridge", async (req, res): Promise<void> => {
-  const pair = await resolvePair(firstStr(req.query.source), firstStr(req.query.target));
-  const bridge = pair ? await computeBridge(pair.src, pair.tgt) : undefined;
-  if (!pair || !bridge) {
+  const bridge = await resolveBridge(
+    firstStr(req.query.source),
+    firstStr(req.query.target),
+  );
+  if (!bridge) {
     res
       .status(404)
-      .json({ error: "Não há dados para a combinação de cenários selecionada" });
+      .json({ error: "Não há bridge para a combinação de cenários selecionada" });
     return;
   }
 
-  let cumulative = bridge.startValue;
-  const steps = [
-    {
-      key: "ebitda_start",
-      label: `EBITDA ${pair.src.label}`,
-      value: bridge.startValue,
-      cumulative: bridge.startValue,
-      kind: "total_start",
-      hasDetail: false,
-    },
-    ...bridge.deltas.map((d) => {
-      cumulative += d.value;
-      return {
-        key: d.key,
-        label: d.label,
-        value: d.value,
-        cumulative,
-        kind: "delta",
-        hasDetail: true,
-      };
-    }),
-    {
-      key: "ebitda_end",
-      label: `EBITDA ${pair.tgt.label}`,
-      value: bridge.endValue,
-      cumulative: bridge.endValue,
-      kind: "total_end",
-      hasDetail: false,
-    },
-  ];
+  const components = await loadComponents(bridge.id);
+  const detailRows = await db
+    .select({ componentKey: bridgeDetailLinesTable.componentKey })
+    .from(bridgeDetailLinesTable)
+    .where(eq(bridgeDetailLinesTable.bridgeId, bridge.id));
+  const withDetail = new Set(detailRows.map((r) => r.componentKey));
 
-  res.json(
-    GetBridgeResponse.parse({
-      title: `Bridge de EBITDA — ${pair.src.label} vs ${pair.tgt.label}`,
-      unit: UNIT,
-      steps,
-    }),
-  );
+  let cumulative = 0;
+  const steps = components.map((c) => {
+    if (c.kind === "total_start") {
+      cumulative = c.valueMusd;
+    } else if (c.kind === "delta") {
+      cumulative += c.valueMusd;
+    }
+    return {
+      key: c.key,
+      label: c.label,
+      value: c.valueMusd,
+      cumulative: c.kind === "total_end" ? c.valueMusd : cumulative,
+      kind: c.kind,
+      hasDetail: withDetail.has(c.key),
+    };
+  });
+
+  res.json(GetBridgeResponse.parse({ title: bridge.title, unit: UNIT, steps }));
 });
 
 router.get("/bridge/components/:key", async (req, res): Promise<void> => {
@@ -193,126 +144,114 @@ router.get("/bridge/components/:key", async (req, res): Promise<void> => {
     return;
   }
 
-  const pair = await resolvePair(firstStr(req.query.source), firstStr(req.query.target));
-  const bridge = pair ? await computeBridge(pair.src, pair.tgt) : undefined;
-  if (!pair || !bridge) {
+  const bridge = await resolveBridge(
+    firstStr(req.query.source),
+    firstStr(req.query.target),
+  );
+  if (!bridge) {
     res
       .status(404)
-      .json({ error: "Não há dados para a combinação de cenários selecionada" });
+      .json({ error: "Não há bridge para a combinação de cenários selecionada" });
     return;
   }
 
-  const key = params.data.key;
-  const component = bridge.deltas.find((d) => d.key === key);
+  const [component] = await db
+    .select()
+    .from(bridgeComponentsTable)
+    .where(
+      and(
+        eq(bridgeComponentsTable.bridgeId, bridge.id),
+        eq(bridgeComponentsTable.key, params.data.key),
+      ),
+    );
+
   if (!component) {
     res.status(404).json({ error: "Componente não encontrado" });
     return;
   }
 
-  // Delta per item (padrao): target − source.
-  const srcItems = new Map<string, number>();
-  for (const f of bridge.srcFacts) {
-    if (f.driver !== key || f.tipoRegistro !== "padrao") continue;
-    srcItems.set(f.item, (srcItems.get(f.item) ?? 0) + f.valorMusd);
-  }
-  const tgtItems = new Map<string, number>();
-  for (const f of bridge.tgtFacts) {
-    if (f.driver !== key || f.tipoRegistro !== "padrao") continue;
-    tgtItems.set(f.item, (tgtItems.get(f.item) ?? 0) + f.valorMusd);
-  }
-  const itemNames = new Set([...srcItems.keys(), ...tgtItems.keys()]);
-  const standardLines = [...itemNames]
-    .map((item) => ({
-      item,
-      value: (tgtItems.get(item) ?? 0) - (srcItems.get(item) ?? 0),
-    }))
-    .filter((l) => Math.abs(l.value) > 0.0005)
-    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-
-  // Adjustments: source adjustments enter with inverted sign (they leave the
-  // bridge), target adjustments with their own sign.
-  const adjustments = [
-    ...bridge.srcFacts
-      .filter((f) => f.driver === key && f.tipoRegistro === "ajuste")
-      .map((f) => ({ fact: f, value: -f.valorMusd, scenario: pair.src.label })),
-    ...bridge.tgtFacts
-      .filter((f) => f.driver === key && f.tipoRegistro === "ajuste")
-      .map((f) => ({ fact: f, value: f.valorMusd, scenario: pair.tgt.label })),
-  ];
-
-  let id = 0;
-  const lines = [
-    ...standardLines.map((l, i) => ({
-      id: ++id,
-      label: l.item,
-      group: null as string | null,
-      value: l.value,
-      sortOrder: i,
-      isAdjustment: false,
-      justification: null as string | null,
-      responsible: null as string | null,
-      status: null as string | null,
-    })),
-    ...adjustments.map((a, i) => ({
-      id: ++id,
-      label: `${a.fact.item} (${a.scenario})`,
-      group: "Ajuste gerencial",
-      value: a.value,
-      sortOrder: i,
-      isAdjustment: true,
-      justification: a.fact.justificativa,
-      responsible: a.fact.responsavel,
-      status: a.fact.status,
-    })),
-  ];
+  const lines = await db
+    .select()
+    .from(bridgeDetailLinesTable)
+    .where(
+      and(
+        eq(bridgeDetailLinesTable.bridgeId, bridge.id),
+        eq(bridgeDetailLinesTable.componentKey, params.data.key),
+      ),
+    )
+    .orderBy(
+      asc(bridgeDetailLinesTable.group),
+      asc(bridgeDetailLinesTable.sortOrder),
+    );
 
   res.json(
     GetBridgeComponentResponse.parse({
       key: component.key,
       label: component.label,
-      value: component.value,
+      value: component.valueMusd,
       unit: UNIT,
-      lines,
+      lines: lines.map((l) => ({
+        id: l.id,
+        label: l.label,
+        group: l.group,
+        value: l.valueMusd,
+        sortOrder: l.sortOrder,
+      })),
     }),
   );
 });
 
 router.get("/bridge/summary", async (req, res): Promise<void> => {
-  const pair = await resolvePair(firstStr(req.query.source), firstStr(req.query.target));
-  const bridge = pair ? await computeBridge(pair.src, pair.tgt) : undefined;
-  if (!pair || !bridge) {
+  const bridge = await resolveBridge(
+    firstStr(req.query.source),
+    firstStr(req.query.target),
+  );
+  if (!bridge) {
     res
       .status(404)
-      .json({ error: "Não há dados para a combinação de cenários selecionada" });
+      .json({ error: "Não há bridge para a combinação de cenários selecionada" });
     return;
   }
 
-  const deltas = bridge.deltas;
-  if (deltas.length === 0) {
-    res.status(404).json({ error: "Sem drivers para o par selecionado" });
+  const components = await loadComponents(bridge.id);
+  const start = components.find((c) => c.kind === "total_start");
+  const end = components.find((c) => c.kind === "total_end");
+  const deltas = components.filter((c) => c.kind === "delta");
+
+  if (!start || !end || deltas.length === 0) {
+    res.status(404).json({ error: "Bridge não importado" });
     return;
   }
-  const largestPositive = deltas.reduce((a, b) => (b.value > a.value ? b : a));
-  const largestNegative = deltas.reduce((a, b) => (b.value < a.value ? b : a));
-  const positiveTotal = deltas.filter((d) => d.value > 0).reduce((s, d) => s + d.value, 0);
-  const negativeTotal = deltas.filter((d) => d.value < 0).reduce((s, d) => s + d.value, 0);
+
+  const largestPositive = deltas.reduce((a, b) =>
+    b.valueMusd > a.valueMusd ? b : a,
+  );
+  const largestNegative = deltas.reduce((a, b) =>
+    b.valueMusd < a.valueMusd ? b : a,
+  );
+  const positiveTotal = deltas
+    .filter((d) => d.valueMusd > 0)
+    .reduce((s, d) => s + d.valueMusd, 0);
+  const negativeTotal = deltas
+    .filter((d) => d.valueMusd < 0)
+    .reduce((s, d) => s + d.valueMusd, 0);
 
   res.json(
     GetBridgeSummaryResponse.parse({
-      startLabel: `EBITDA ${pair.src.label}`,
-      startValue: bridge.startValue,
-      endLabel: `EBITDA ${pair.tgt.label}`,
-      endValue: bridge.endValue,
-      totalVariation: bridge.endValue - bridge.startValue,
+      startLabel: start.label,
+      startValue: start.valueMusd,
+      endLabel: end.label,
+      endValue: end.valueMusd,
+      totalVariation: end.valueMusd - start.valueMusd,
       largestPositive: {
         key: largestPositive.key,
         label: largestPositive.label,
-        value: largestPositive.value,
+        value: largestPositive.valueMusd,
       },
       largestNegative: {
         key: largestNegative.key,
         label: largestNegative.label,
-        value: largestNegative.value,
+        value: largestNegative.valueMusd,
       },
       positiveTotal,
       negativeTotal,

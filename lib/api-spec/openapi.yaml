@@ -233,19 +233,7 @@ components:
           description: Impact in MUSD.
         sortOrder:
           type: number
-        isAdjustment:
-          type: boolean
-          description: True when the line is a managerial adjustment (tipo_registro = ajuste).
-        justification:
-          type: ["string", "null"]
-          description: Justification of the adjustment (only for adjustments).
-        responsible:
-          type: ["string", "null"]
-          description: Responsible for the adjustment (only for adjustments).
-        status:
-          type: ["string", "null"]
-          description: Approval status of the adjustment (only for adjustments).
-      required: [id, label, group, value, sortOrder, isAdjustment, justification, responsible, status]
+      required: [id, label, group, value, sortOrder]
     BridgeComponentDetail:
       type: object
       properties:
