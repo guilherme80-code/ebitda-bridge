@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Painel Bridge de EBITDA"
+description = "Solução de relatórios consolidados cuja tela principal é um gráfico de cascata (waterfall) do bridge de EBITDA FY26 Budget vs FY26 MRF7, com drill-down por componente (Vol & Mix, Selling price, Input price, Usage, Fixed cost, Forex, SV/Others), alimentado pelos dados da aba Cálculo do Excel enviado."
+version = "1.0.0"
+id = "artifacts/bridge-ebitda"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23808
+
+[services.development]
+run = "pnpm --filter @workspace/bridge-ebitda run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/bridge-ebitda", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/bridge-ebitda/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23808"
+BASE_PATH = "/"

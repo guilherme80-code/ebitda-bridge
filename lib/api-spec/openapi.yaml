@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: bridge
+    description: EBITDA bridge operations
 paths:
   /healthz:
     get:
@@ -24,8 +26,147 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /scenarios:
+    get:
+      operationId: listScenarios
+      tags: [bridge]
+      summary: List available scenarios (version + period)
+      description: Returns the scenarios that can be chosen as source or target of a bridge, and the valid source/target pairs.
+      responses:
+        "200":
+          description: Scenario catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioCatalog"
+  /bridge:
+    get:
+      operationId: getBridge
+      tags: [bridge]
+      summary: Get the consolidated EBITDA bridge
+      description: Returns the ordered waterfall steps of the EBITDA bridge for a source/target scenario pair, including start/end totals and cumulative values.
+      parameters:
+        - $ref: "#/components/parameters/SourceScenario"
+        - $ref: "#/components/parameters/TargetScenario"
+      responses:
+        "200":
+          description: Bridge waterfall
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bridge"
+        "404":
+          description: No bridge for the selected scenario pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /bridge/components/{key}:
+    get:
+      operationId: getBridgeComponent
+      tags: [bridge]
+      summary: Get drill-down details for a bridge component
+      description: Returns the supporting detail lines (from the Cálculo sheet) for one bridge component.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/SourceScenario"
+        - $ref: "#/components/parameters/TargetScenario"
+      responses:
+        "200":
+          description: Component detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeComponentDetail"
+        "404":
+          description: Component not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /bridge/summary:
+    get:
+      operationId: getBridgeSummary
+      tags: [bridge]
+      summary: Get executive summary of the bridge
+      description: Returns headline figures — start, end, total variation, largest positive and negative impacts.
+      parameters:
+        - $ref: "#/components/parameters/SourceScenario"
+        - $ref: "#/components/parameters/TargetScenario"
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeSummary"
+        "404":
+          description: No bridge for the selected scenario pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
 components:
+  parameters:
+    SourceScenario:
+      name: source
+      in: query
+      required: false
+      description: Source scenario id (version + period of origin). Defaults to the default bridge's source.
+      schema:
+        type: string
+    TargetScenario:
+      name: target
+      in: query
+      required: false
+      description: Target scenario id (version + period of destination). Defaults to the default bridge's target.
+      schema:
+        type: string
   schemas:
+    Scenario:
+      type: object
+      description: A scenario is a combination of version (e.g. Budget, MRF7) and period (e.g. FY26).
+      properties:
+        id:
+          type: string
+          description: Stable identifier (e.g. fy26_budget).
+        version:
+          type: string
+          description: Version name (e.g. Budget, MRF7).
+        period:
+          type: string
+          description: Period (e.g. FY26).
+        label:
+          type: string
+          description: Display label in Portuguese.
+      required: [id, version, period, label]
+    ScenarioPair:
+      type: object
+      description: A valid source/target combination for which a bridge exists.
+      properties:
+        sourceId:
+          type: string
+        targetId:
+          type: string
+      required: [sourceId, targetId]
+    ScenarioCatalog:
+      type: object
+      properties:
+        scenarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/Scenario"
+        pairs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScenarioPair"
+        defaultPair:
+          $ref: "#/components/schemas/ScenarioPair"
+      required: [scenarios, pairs, defaultPair]
     HealthStatus:
       type: object
       properties:
@@ -33,4 +174,123 @@ components:
           type: string
       required:
         - status
-
+    ErrorMessage:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    BridgeStep:
+      type: object
+      description: One bar of the waterfall chart, in MUSD.
+      properties:
+        key:
+          type: string
+          description: Stable identifier of the component (e.g. vol_mix, selling_price).
+        label:
+          type: string
+          description: Display label in Portuguese.
+        value:
+          type: number
+          description: Impact in MUSD (positive or negative). For totals, the absolute level.
+        cumulative:
+          type: number
+          description: Cumulative EBITDA level after this step, in MUSD.
+        kind:
+          type: string
+          enum: [total_start, delta, total_end]
+        hasDetail:
+          type: boolean
+          description: Whether a drill-down detail exists for this component.
+      required: [key, label, value, cumulative, kind, hasDetail]
+    Bridge:
+      type: object
+      properties:
+        title:
+          type: string
+        unit:
+          type: string
+          description: Unit of the values (MUSD).
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/BridgeStep"
+      required: [title, unit, steps]
+    BridgeDetailLine:
+      type: object
+      description: One supporting line of a bridge component drill-down.
+      properties:
+        id:
+          type: number
+        label:
+          type: string
+        group:
+          type: ["string", "null"]
+          description: Optional sub-grouping inside the component (e.g. Volume vs Mix, product family).
+        value:
+          type: number
+          description: Impact in MUSD.
+        sortOrder:
+          type: number
+      required: [id, label, group, value, sortOrder]
+    BridgeComponentDetail:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        value:
+          type: number
+          description: Total impact of the component in MUSD.
+        unit:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/BridgeDetailLine"
+      required: [key, label, value, unit, lines]
+    BridgeSummary:
+      type: object
+      properties:
+        startLabel:
+          type: string
+        startValue:
+          type: number
+        endLabel:
+          type: string
+        endValue:
+          type: number
+        totalVariation:
+          type: number
+        largestPositive:
+          $ref: "#/components/schemas/BridgeImpactHighlight"
+        largestNegative:
+          $ref: "#/components/schemas/BridgeImpactHighlight"
+        positiveTotal:
+          type: number
+          description: Sum of all positive impacts, MUSD.
+        negativeTotal:
+          type: number
+          description: Sum of all negative impacts, MUSD.
+      required:
+        - startLabel
+        - startValue
+        - endLabel
+        - endValue
+        - totalVariation
+        - largestPositive
+        - largestNegative
+        - positiveTotal
+        - negativeTotal
+    BridgeImpactHighlight:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        value:
+          type: number
+      required: [key, label, value]
