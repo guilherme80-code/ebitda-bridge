@@ -31,5 +31,8 @@ export * from './scenarioPeriodKind';
 export * from './simulateBridgeBody';
 export * from './simulateBridgeParams';
 export * from './simulateBridgeResponse';
+export * from './simulatedBridgeTable';
+export * from './simulatedBridgeTableRow';
+export * from './simulatedBridgeTableRowKind';
 export * from './sourceScenarioParameter';
 export * from './targetScenarioParameter';

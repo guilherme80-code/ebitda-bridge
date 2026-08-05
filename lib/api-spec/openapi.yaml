@@ -420,6 +420,48 @@ components:
           type: string
           description: Natural-language what-if instruction in Portuguese.
       required: [prompt]
+    SimulatedBridgeTableRow:
+      type: object
+      description: One row of a simulated detailed table, with the original values and change flags aligned to the columns.
+      properties:
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [row, subtotal, total]
+        values:
+          type: array
+          description: Simulated values, aligned with the columns; null means not applicable.
+          items:
+            type: ["number", "null"]
+        baseValues:
+          type: array
+          description: Original (pre-simulation) values, aligned with the columns.
+          items:
+            type: ["number", "null"]
+        changed:
+          type: array
+          description: Whether each cell was affected by the simulation (aligned with the columns).
+          items:
+            type: boolean
+      required: [label, kind, values, baseValues, changed]
+    SimulatedBridgeTable:
+      type: object
+      description: A detailed table recomputed with the simulated data, including original values per cell.
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/BridgeTableColumn"
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimulatedBridgeTableRow"
+      required: [key, title, columns, rows]
     SimulateBridgeResponse:
       type: object
       properties:
@@ -443,7 +485,12 @@ components:
         deltaEbitda:
           type: number
           description: Difference between the simulated and the original final EBITDA, in MUSD.
-      required: [title, unit, interpretation, adjustments, steps, deltaEbitda]
+        tables:
+          type: array
+          description: Detailed tables recomputed with the simulated data, with original values and change flags per cell.
+          items:
+            $ref: "#/components/schemas/SimulatedBridgeTable"
+      required: [title, unit, interpretation, adjustments, steps, deltaEbitda, tables]
     BridgeImpactHighlight:
       type: object
       properties:

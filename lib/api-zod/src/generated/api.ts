@@ -142,7 +142,22 @@ export const SimulateBridgeResponse = zod.object({
   "kind": zod.enum(['total_start', 'delta', 'total_end']),
   "hasDetail": zod.boolean().describe('Whether a drill-down detail exists for this component.')
 }).describe('One bar of the waterfall chart, in MUSD.')).describe('Simulated waterfall steps (same shape as the base bridge).'),
-  "deltaEbitda": zod.number().describe('Difference between the simulated and the original final EBITDA, in MUSD.')
+  "deltaEbitda": zod.number().describe('Difference between the simulated and the original final EBITDA, in MUSD.'),
+  "tables": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "columns": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string()
+}).describe('One numeric column of a detailed table; the label includes the unit.')),
+  "rows": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['row', 'subtotal', 'total']),
+  "values": zod.array(zod.number().nullable()).describe('Simulated values, aligned with the columns; null means not applicable.'),
+  "baseValues": zod.array(zod.number().nullable()).describe('Original (pre-simulation) values, aligned with the columns.'),
+  "changed": zod.array(zod.boolean()).describe('Whether each cell was affected by the simulation (aligned with the columns).')
+}).describe('One row of a simulated detailed table, with the original values and change flags aligned to the columns.'))
+}).describe('A detailed table recomputed with the simulated data, including original values per cell.')).describe('Detailed tables recomputed with the simulated data, with original values and change flags per cell.')
 })
 
 

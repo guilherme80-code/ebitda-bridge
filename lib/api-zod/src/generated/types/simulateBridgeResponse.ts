@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { BridgeStep } from './bridgeStep';
+import type { SimulatedBridgeTable } from './simulatedBridgeTable';
 
 export interface SimulateBridgeResponse {
   title: string;
@@ -18,4 +19,6 @@ export interface SimulateBridgeResponse {
   steps: BridgeStep[];
   /** Difference between the simulated and the original final EBITDA, in MUSD. */
   deltaEbitda: number;
+  /** Detailed tables recomputed with the simulated data, with original values and change flags per cell. */
+  tables: SimulatedBridgeTable[];
 }

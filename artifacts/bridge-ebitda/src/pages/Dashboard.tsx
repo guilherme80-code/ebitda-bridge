@@ -137,14 +137,28 @@ export default function Dashboard() {
                 </h2>
                 <p className="text-sm font-medium text-slate-500 mt-1">
                   {simulation
-                    ? 'Visão simulada — limpe a simulação para voltar ao bridge original.'
+                    ? 'Comparação original vs simulado — limpe a simulação para voltar ao bridge original.'
                     : 'Clique nas alavancas com detalhamento para análise aprofundada (drill-down).'}
                 </p>
               </div>
+              {simulation && (
+                <div className="flex items-center gap-4 mt-3 sm:mt-0" data-testid="legend-simulation">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                    <span className="w-3 h-3 rounded-sm bg-slate-400/60" /> Original
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                    <span className="w-3 h-3 rounded-sm bg-emerald-500" /> Simulado
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600">
+                    <span className="w-3 h-3 rounded-sm border-2 border-indigo-500 bg-white" /> Ajustado
+                  </span>
+                </div>
+              )}
             </div>
             <div className="w-full h-[480px]">
               <WaterfallChart 
                 steps={simulation ? simulation.steps : bridge.steps} 
+                baseSteps={simulation ? bridge.steps : undefined}
                 onBarClick={(step) => {
                   if (step.hasDetail && !simulation) setSelectedComponent({ key: step.key, label: step.label });
                 }}
@@ -154,7 +168,7 @@ export default function Dashboard() {
         )}
 
         {!isLoading && !isError && bridge && (
-          <DetailedTables params={params} enabled={pairAvailable} />
+          <DetailedTables params={params} enabled={pairAvailable} simulatedTables={simulation?.tables} />
         )}
       </div>
 

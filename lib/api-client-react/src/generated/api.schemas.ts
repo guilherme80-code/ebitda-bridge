@@ -181,6 +181,39 @@ export interface SimulateBridgeBody {
   prompt: string;
 }
 
+export type SimulatedBridgeTableRowKind = typeof SimulatedBridgeTableRowKind[keyof typeof SimulatedBridgeTableRowKind];
+
+
+export const SimulatedBridgeTableRowKind = {
+  row: 'row',
+  subtotal: 'subtotal',
+  total: 'total',
+} as const;
+
+/**
+ * One row of a simulated detailed table, with the original values and change flags aligned to the columns.
+ */
+export interface SimulatedBridgeTableRow {
+  label: string;
+  kind: SimulatedBridgeTableRowKind;
+  /** Simulated values, aligned with the columns; null means not applicable. */
+  values: (number | null)[];
+  /** Original (pre-simulation) values, aligned with the columns. */
+  baseValues: (number | null)[];
+  /** Whether each cell was affected by the simulation (aligned with the columns). */
+  changed: boolean[];
+}
+
+/**
+ * A detailed table recomputed with the simulated data, including original values per cell.
+ */
+export interface SimulatedBridgeTable {
+  key: string;
+  title: string;
+  columns: BridgeTableColumn[];
+  rows: SimulatedBridgeTableRow[];
+}
+
 export interface SimulateBridgeResponse {
   title: string;
   unit: string;
@@ -192,6 +225,8 @@ export interface SimulateBridgeResponse {
   steps: BridgeStep[];
   /** Difference between the simulated and the original final EBITDA, in MUSD. */
   deltaEbitda: number;
+  /** Detailed tables recomputed with the simulated data, with original values and change flags per cell. */
+  tables: SimulatedBridgeTable[];
 }
 
 /**
