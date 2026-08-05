@@ -10,6 +10,5 @@ import type { ScenarioPair } from './scenarioPair';
 
 export interface ScenarioCatalog {
   scenarios: Scenario[];
-  pairs: ScenarioPair[];
   defaultPair: ScenarioPair;
 }

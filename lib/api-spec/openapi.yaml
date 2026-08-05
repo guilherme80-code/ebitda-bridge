@@ -31,7 +31,7 @@ paths:
       operationId: listScenarios
       tags: [bridge]
       summary: List available scenarios (version + period)
-      description: Returns the scenarios that can be chosen as source or target of a bridge, and the valid source/target pairs.
+      description: Returns all versions (BUDGET, MRF1..MRF7) with a flag indicating whether imported data exists, plus the default comparison pair. Any two versions with data can be compared; the bridge is computed on the fly.
       responses:
         "200":
           description: Scenario catalog
@@ -55,6 +55,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Bridge"
+        "400":
+          description: Source and target periods have different granularity (year vs quarter vs month)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: No bridge for the selected scenario pair
           content:
@@ -104,6 +110,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BridgeSummary"
+        "400":
+          description: Source and target periods have different granularity (year vs quarter vs month)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: No bridge for the selected scenario pair
           content:
@@ -116,14 +128,14 @@ components:
       name: source
       in: query
       required: false
-      description: Source scenario id (version + period of origin). Defaults to the default bridge's source.
+      description: Source scenario id (version + period of origin). Defaults to the first version with imported data.
       schema:
         type: string
     TargetScenario:
       name: target
       in: query
       required: false
-      description: Target scenario id (version + period of destination). Defaults to the default bridge's target.
+      description: Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
       schema:
         type: string
   schemas:
@@ -139,14 +151,21 @@ components:
           description: Version name (e.g. Budget, MRF7).
         period:
           type: string
-          description: Period (e.g. FY26).
+          description: Period (e.g. FY26, FY26 Q1, FY26 Jan).
+        periodKind:
+          type: string
+          enum: [year, quarter, month]
+          description: Granularity of the period. Only scenarios of the same kind can be compared (year vs year, quarter vs quarter, month vs month).
         label:
           type: string
           description: Display label in Portuguese.
-      required: [id, version, period, label]
+        hasData:
+          type: boolean
+          description: Whether imported data exists for this version. Versions without data cannot be compared yet.
+      required: [id, version, period, periodKind, label, hasData]
     ScenarioPair:
       type: object
-      description: A valid source/target combination for which a bridge exists.
+      description: A source/target combination of scenarios.
       properties:
         sourceId:
           type: string
@@ -160,13 +179,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Scenario"
-        pairs:
-          type: array
-          items:
-            $ref: "#/components/schemas/ScenarioPair"
         defaultPair:
           $ref: "#/components/schemas/ScenarioPair"
-      required: [scenarios, pairs, defaultPair]
+      required: [scenarios, defaultPair]
     HealthStatus:
       type: object
       properties:

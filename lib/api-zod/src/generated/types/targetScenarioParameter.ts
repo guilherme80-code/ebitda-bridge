@@ -7,6 +7,6 @@
  */
 
 /**
- * Target scenario id (version + period of destination). Defaults to the default bridge's target.
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
  */
 export type TargetScenarioParameter = string;

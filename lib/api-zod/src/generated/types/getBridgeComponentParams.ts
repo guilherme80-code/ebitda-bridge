@@ -10,11 +10,11 @@ import type { TargetScenarioParameter } from './targetScenarioParameter';
 
 export type GetBridgeComponentParams = {
 /**
- * Source scenario id (version + period of origin). Defaults to the default bridge's source.
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */
 source?: SourceScenarioParameter;
 /**
- * Target scenario id (version + period of destination). Defaults to the default bridge's target.
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
  */
 target?: TargetScenarioParameter;
 };

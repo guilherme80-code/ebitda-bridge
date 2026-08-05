@@ -21,5 +21,6 @@ export * from './healthStatus';
 export * from './scenario';
 export * from './scenarioCatalog';
 export * from './scenarioPair';
+export * from './scenarioPeriodKind';
 export * from './sourceScenarioParameter';
 export * from './targetScenarioParameter';

@@ -4,45 +4,42 @@ import {
   pgTable,
   serial,
   text,
-  boolean,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-// A scenario is a combination of version (Budget, MRF7...) and period (FY26...).
+// A scenario is an independent version (BUDGET, MRF1..MRF7) within a period.
+// Periods have a granularity kind: "year" (FY25), "quarter" (FY26 Q1) or
+// "month" (FY26 Jan). Only scenarios of the same kind can be compared.
 export const scenariosTable = pgTable("scenarios", {
-  id: text("id").primaryKey(), // e.g. fy26_budget
+  id: text("id").primaryKey(), // e.g. fy26_fy_budget, fy26_q1_mrf3
   version: text("version").notNull(),
-  period: text("period").notNull(),
+  period: text("period").notNull(), // e.g. FY26, FY26 Q1, FY26 Jan
+  periodKind: text("period_kind").notNull().default("year"), // year | quarter | month
   label: text("label").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-// A bridge explains the variation between a source and a target scenario.
-export const bridgesTable = pgTable("bridges", {
+/**
+ * Absolute facts per scenario, in MUSD.
+ * metric = "ebitda" for the EBITDA level of the version, or a driver key
+ * (vol_mix, selling_price, ...) holding the driver's cumulated level relative
+ * to the common reference (BUDGET = 0). The bridge between any two scenarios
+ * is computed on the fly as target − source per metric.
+ * A scenario "has data" when its "ebitda" fact exists.
+ */
+export const scenarioFactsTable = pgTable("scenario_facts", {
   id: serial("id").primaryKey(),
-  sourceScenarioId: text("source_scenario_id").notNull(),
-  targetScenarioId: text("target_scenario_id").notNull(),
-  title: text("title").notNull(),
-  isDefault: boolean("is_default").notNull().default(false),
-});
-
-// One bar of the EBITDA bridge waterfall (totals and deltas), values in MUSD.
-export const bridgeComponentsTable = pgTable("bridge_components", {
-  id: serial("id").primaryKey(),
-  bridgeId: integer("bridge_id").notNull(),
-  key: text("key").notNull(),
-  label: text("label").notNull(),
-  // "total_start" | "delta" | "total_end"
-  kind: text("kind").notNull(),
+  scenarioId: text("scenario_id").notNull(),
+  metric: text("metric").notNull(),
   valueMusd: doublePrecision("value_musd").notNull(),
-  sortOrder: integer("sort_order").notNull(),
 });
 
-// Supporting drill-down lines per component, values in MUSD.
-export const bridgeDetailLinesTable = pgTable("bridge_detail_lines", {
+// Drill-down facts per scenario: cumulated level per driver/line relative to
+// the common reference (BUDGET = 0), in MUSD. Missing rows mean level 0.
+export const scenarioDetailFactsTable = pgTable("scenario_detail_facts", {
   id: serial("id").primaryKey(),
-  bridgeId: integer("bridge_id").notNull(),
+  scenarioId: text("scenario_id").notNull(),
   componentKey: text("component_key").notNull(),
   label: text("label").notNull(),
   group: text("group"),
@@ -50,26 +47,31 @@ export const bridgeDetailLinesTable = pgTable("bridge_detail_lines", {
   sortOrder: integer("sort_order").notNull(),
 });
 
+// Waterfall driver catalog (order and Portuguese labels).
+export const BRIDGE_DRIVERS = [
+  { key: "vol_mix", label: "Volume & Mix" },
+  { key: "selling_price", label: "Preço de venda" },
+  { key: "input_price", label: "Preço de insumos" },
+  { key: "usage", label: "Consumo (Usage)" },
+  { key: "fixed_cost", label: "Custo fixo" },
+  { key: "forex", label: "Câmbio" },
+  { key: "sv_others", label: "Estoque / Outros" },
+] as const;
+
 export const insertScenarioSchema = createInsertSchema(scenariosTable);
 export type InsertScenario = z.infer<typeof insertScenarioSchema>;
 export type Scenario = typeof scenariosTable.$inferSelect;
 
-export const insertBridgeSchema = createInsertSchema(bridgesTable).omit({
-  id: true,
-});
-export type InsertBridge = z.infer<typeof insertBridgeSchema>;
-export type BridgeRow = typeof bridgesTable.$inferSelect;
-
-export const insertBridgeComponentSchema = createInsertSchema(
-  bridgeComponentsTable,
+export const insertScenarioFactSchema = createInsertSchema(
+  scenarioFactsTable,
 ).omit({ id: true });
-export type InsertBridgeComponent = z.infer<typeof insertBridgeComponentSchema>;
-export type BridgeComponent = typeof bridgeComponentsTable.$inferSelect;
+export type InsertScenarioFact = z.infer<typeof insertScenarioFactSchema>;
+export type ScenarioFact = typeof scenarioFactsTable.$inferSelect;
 
-export const insertBridgeDetailLineSchema = createInsertSchema(
-  bridgeDetailLinesTable,
+export const insertScenarioDetailFactSchema = createInsertSchema(
+  scenarioDetailFactsTable,
 ).omit({ id: true });
-export type InsertBridgeDetailLine = z.infer<
-  typeof insertBridgeDetailLineSchema
+export type InsertScenarioDetailFact = z.infer<
+  typeof insertScenarioDetailFactSchema
 >;
-export type BridgeDetailLine = typeof bridgeDetailLinesTable.$inferSelect;
+export type ScenarioDetailFact = typeof scenarioDetailFactsTable.$inferSelect;

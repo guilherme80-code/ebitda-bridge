@@ -6,6 +6,18 @@
  * OpenAPI spec version: 0.1.0
  */
 /**
+ * Granularity of the period. Only scenarios of the same kind can be compared (year vs year, quarter vs quarter, month vs month).
+ */
+export type ScenarioPeriodKind = typeof ScenarioPeriodKind[keyof typeof ScenarioPeriodKind];
+
+
+export const ScenarioPeriodKind = {
+  year: 'year',
+  quarter: 'quarter',
+  month: 'month',
+} as const;
+
+/**
  * A scenario is a combination of version (e.g. Budget, MRF7) and period (e.g. FY26).
  */
 export interface Scenario {
@@ -13,14 +25,18 @@ export interface Scenario {
   id: string;
   /** Version name (e.g. Budget, MRF7). */
   version: string;
-  /** Period (e.g. FY26). */
+  /** Period (e.g. FY26, FY26 Q1, FY26 Jan). */
   period: string;
+  /** Granularity of the period. Only scenarios of the same kind can be compared (year vs year, quarter vs quarter, month vs month). */
+  periodKind: ScenarioPeriodKind;
   /** Display label in Portuguese. */
   label: string;
+  /** Whether imported data exists for this version. Versions without data cannot be compared yet. */
+  hasData: boolean;
 }
 
 /**
- * A valid source/target combination for which a bridge exists.
+ * A source/target combination of scenarios.
  */
 export interface ScenarioPair {
   sourceId: string;
@@ -29,7 +45,6 @@ export interface ScenarioPair {
 
 export interface ScenarioCatalog {
   scenarios: Scenario[];
-  pairs: ScenarioPair[];
   defaultPair: ScenarioPair;
 }
 
@@ -120,44 +135,44 @@ export interface BridgeSummary {
 }
 
 /**
- * Source scenario id (version + period of origin). Defaults to the default bridge's source.
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */
 export type SourceScenarioParameter = string;
 
 /**
- * Target scenario id (version + period of destination). Defaults to the default bridge's target.
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
  */
 export type TargetScenarioParameter = string;
 
 export type GetBridgeParams = {
 /**
- * Source scenario id (version + period of origin). Defaults to the default bridge's source.
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */
 source?: SourceScenarioParameter;
 /**
- * Target scenario id (version + period of destination). Defaults to the default bridge's target.
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
  */
 target?: TargetScenarioParameter;
 };
 
 export type GetBridgeComponentParams = {
 /**
- * Source scenario id (version + period of origin). Defaults to the default bridge's source.
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */
 source?: SourceScenarioParameter;
 /**
- * Target scenario id (version + period of destination). Defaults to the default bridge's target.
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
  */
 target?: TargetScenarioParameter;
 };
 
 export type GetBridgeSummaryParams = {
 /**
- * Source scenario id (version + period of origin). Defaults to the default bridge's source.
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */
 source?: SourceScenarioParameter;
 /**
- * Target scenario id (version + period of destination). Defaults to the default bridge's target.
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
  */
 target?: TargetScenarioParameter;
 };

@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ScenarioPeriodKind } from './scenarioPeriodKind';
 
 /**
  * A scenario is a combination of version (e.g. Budget, MRF7) and period (e.g. FY26).
@@ -14,8 +15,12 @@ export interface Scenario {
   id: string;
   /** Version name (e.g. Budget, MRF7). */
   version: string;
-  /** Period (e.g. FY26). */
+  /** Period (e.g. FY26, FY26 Q1, FY26 Jan). */
   period: string;
+  /** Granularity of the period. Only scenarios of the same kind can be compared (year vs year, quarter vs quarter, month vs month). */
+  periodKind: ScenarioPeriodKind;
   /** Display label in Portuguese. */
   label: string;
+  /** Whether imported data exists for this version. Versions without data cannot be compared yet. */
+  hasData: boolean;
 }

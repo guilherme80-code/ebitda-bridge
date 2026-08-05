@@ -7,7 +7,7 @@
  */
 
 /**
- * A valid source/target combination for which a bridge exists.
+ * A source/target combination of scenarios.
  */
 export interface ScenarioPair {
   sourceId: string;

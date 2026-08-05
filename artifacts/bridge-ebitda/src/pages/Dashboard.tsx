@@ -26,9 +26,13 @@ export default function Dashboard() {
   }, [catalog, sourceId, targetId]);
 
   const pairSelected = !!sourceId && !!targetId;
+  const sourceSel = catalog?.scenarios.find((s) => s.id === sourceId);
+  const targetSel = catalog?.scenarios.find((s) => s.id === targetId);
   const pairAvailable =
     pairSelected &&
-    !!catalog?.pairs.some((p) => p.sourceId === sourceId && p.targetId === targetId);
+    !!sourceSel?.hasData &&
+    !!targetSel?.hasData &&
+    sourceSel.periodKind === targetSel.periodKind;
   const params = pairSelected
     ? { source: sourceId, target: targetId }
     : undefined;
@@ -67,7 +71,6 @@ export default function Dashboard() {
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
             <ScenarioSelector
               scenarios={catalog.scenarios}
-              pairs={catalog.pairs}
               sourceId={sourceId}
               targetId={targetId}
               onChange={(s, t) => {

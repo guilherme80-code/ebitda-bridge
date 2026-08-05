@@ -1,6 +1,12 @@
 import { ArrowRight } from 'lucide-react';
-import type { Scenario, ScenarioPair } from '@workspace/api-client-react';
+import type { Scenario } from '@workspace/api-client-react';
 import { cn } from '../lib/utils';
+
+const KIND_LABEL: Record<string, string> = {
+  year: 'Ano',
+  quarter: 'Trimestre',
+  month: 'Mês',
+};
 
 function ScenarioPicker({
   title,
@@ -15,7 +21,19 @@ function ScenarioPicker({
 }) {
   const selected = scenarios.find((s) => s.id === selectedId);
   const versions = [...new Set(scenarios.map((s) => s.version))];
-  const periods = [...new Set(scenarios.map((s) => s.period))];
+
+  // Períodos únicos na ordem do catálogo, agrupados por tipo (ano/trimestre/mês).
+  const periods: { period: string; periodKind: string }[] = [];
+  const seen = new Set<string>();
+  for (const s of scenarios) {
+    if (!seen.has(s.period)) {
+      seen.add(s.period);
+      periods.push({ period: s.period, periodKind: s.periodKind });
+    }
+  }
+  const kinds = ['year', 'quarter', 'month'].filter((k) =>
+    periods.some((p) => p.periodKind === k),
+  );
 
   const pick = (version: string, period: string, changed: 'version' | 'period') => {
     const exact = scenarios.find(
@@ -25,14 +43,17 @@ function ScenarioPicker({
       onSelect(exact.id);
       return;
     }
-    // The exact combination doesn't exist — fall back to the first scenario
-    // matching the field the user just changed.
+    // A combinação exata não existe — usa o primeiro cenário compatível com o
+    // campo que o usuário acabou de alterar.
     const fallback =
       changed === 'version'
         ? scenarios.find((s) => s.version === version)
         : scenarios.find((s) => s.period === period);
     if (fallback) onSelect(fallback.id);
   };
+
+  const versionHasData = (version: string) =>
+    scenarios.some((s) => s.version === version && s.hasData);
 
   return (
     <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3">
@@ -47,11 +68,11 @@ function ScenarioPicker({
           <select
             className="w-full text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400/40 cursor-pointer"
             value={selected?.version ?? ''}
-            onChange={(e) => pick(e.target.value, selected?.period ?? periods[0], 'version')}
+            onChange={(e) => pick(e.target.value, selected?.period ?? '', 'version')}
           >
             {versions.map((v) => (
-              <option key={v} value={v}>
-                {v}
+              <option key={v} value={v} disabled={!versionHasData(v)}>
+                {versionHasData(v) ? v : `${v} (sem dados)`}
               </option>
             ))}
           </select>
@@ -65,10 +86,16 @@ function ScenarioPicker({
             value={selected?.period ?? ''}
             onChange={(e) => pick(selected?.version ?? versions[0], e.target.value, 'period')}
           >
-            {periods.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
+            {kinds.map((k) => (
+              <optgroup key={k} label={KIND_LABEL[k] ?? k}>
+                {periods
+                  .filter((p) => p.periodKind === k)
+                  .map((p) => (
+                    <option key={p.period} value={p.period}>
+                      {p.period}
+                    </option>
+                  ))}
+              </optgroup>
             ))}
           </select>
         </label>
@@ -79,21 +106,21 @@ function ScenarioPicker({
 
 export function ScenarioSelector({
   scenarios,
-  pairs,
   sourceId,
   targetId,
   onChange,
 }: {
   scenarios: Scenario[];
-  pairs: ScenarioPair[];
   sourceId: string | null;
   targetId: string | null;
   onChange: (sourceId: string, targetId: string) => void;
 }) {
-  const pairAvailable =
-    !!sourceId &&
-    !!targetId &&
-    pairs.some((p) => p.sourceId === sourceId && p.targetId === targetId);
+  const byId = (id: string | null) => scenarios.find((s) => s.id === id);
+  const source = byId(sourceId);
+  const target = byId(targetId);
+  const bothHaveData = !!source?.hasData && !!target?.hasData;
+  const sameKind =
+    !!source && !!target && source.periodKind === target.periodKind;
 
   return (
     <div className="w-full">
@@ -117,10 +144,12 @@ export function ScenarioSelector({
       <p
         className={cn(
           'text-xs font-semibold mt-2 transition-opacity',
-          pairAvailable ? 'opacity-0 h-0 overflow-hidden' : 'text-amber-600',
+          bothHaveData && sameKind ? 'opacity-0 h-0 overflow-hidden' : 'text-amber-600',
         )}
       >
-        Não há bridge disponível para esta combinação de cenários. Selecione outra combinação.
+        {!bothHaveData
+          ? 'Uma das versões selecionadas ainda não possui dados importados. Selecione outra combinação.'
+          : 'Compare períodos do mesmo tipo: ano com ano, trimestre com trimestre ou mês com mês.'}
       </p>
     </div>
   );

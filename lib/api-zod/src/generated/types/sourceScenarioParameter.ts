@@ -7,6 +7,6 @@
  */
 
 /**
- * Source scenario id (version + period of origin). Defaults to the default bridge's source.
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */
 export type SourceScenarioParameter = string;

@@ -18,24 +18,22 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Returns the scenarios that can be chosen as source or target of a bridge, and the valid source/target pairs.
+ * Returns all versions (BUDGET, MRF1..MRF7) with a flag indicating whether imported data exists, plus the default comparison pair. Any two versions with data can be compared; the bridge is computed on the fly.
  * @summary List available scenarios (version + period)
  */
 export const ListScenariosResponse = zod.object({
   "scenarios": zod.array(zod.object({
   "id": zod.string().describe('Stable identifier (e.g. fy26_budget).'),
   "version": zod.string().describe('Version name (e.g. Budget, MRF7).'),
-  "period": zod.string().describe('Period (e.g. FY26).'),
-  "label": zod.string().describe('Display label in Portuguese.')
+  "period": zod.string().describe('Period (e.g. FY26, FY26 Q1, FY26 Jan).'),
+  "periodKind": zod.enum(['year', 'quarter', 'month']).describe('Granularity of the period. Only scenarios of the same kind can be compared (year vs year, quarter vs quarter, month vs month).'),
+  "label": zod.string().describe('Display label in Portuguese.'),
+  "hasData": zod.boolean().describe('Whether imported data exists for this version. Versions without data cannot be compared yet.')
 }).describe('A scenario is a combination of version (e.g. Budget, MRF7) and period (e.g. FY26).')),
-  "pairs": zod.array(zod.object({
-  "sourceId": zod.string(),
-  "targetId": zod.string()
-}).describe('A valid source\/target combination for which a bridge exists.')),
   "defaultPair": zod.object({
   "sourceId": zod.string(),
   "targetId": zod.string()
-}).describe('A valid source\/target combination for which a bridge exists.')
+}).describe('A source\/target combination of scenarios.')
 })
 
 
@@ -44,8 +42,8 @@ export const ListScenariosResponse = zod.object({
  * @summary Get the consolidated EBITDA bridge
  */
 export const GetBridgeQueryParams = zod.object({
-  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the default bridge\'s source.'),
-  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the default bridge\'s target.')
+  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the first version with imported data.'),
+  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the most recent version with imported data.')
 })
 
 export const GetBridgeResponse = zod.object({
@@ -71,8 +69,8 @@ export const GetBridgeComponentParams = zod.object({
 })
 
 export const GetBridgeComponentQueryParams = zod.object({
-  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the default bridge\'s source.'),
-  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the default bridge\'s target.')
+  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the first version with imported data.'),
+  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the most recent version with imported data.')
 })
 
 export const GetBridgeComponentResponse = zod.object({
@@ -95,8 +93,8 @@ export const GetBridgeComponentResponse = zod.object({
  * @summary Get executive summary of the bridge
  */
 export const GetBridgeSummaryQueryParams = zod.object({
-  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the default bridge\'s source.'),
-  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the default bridge\'s target.')
+  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the first version with imported data.'),
+  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the most recent version with imported data.')
 })
 
 export const GetBridgeSummaryResponse = zod.object({
