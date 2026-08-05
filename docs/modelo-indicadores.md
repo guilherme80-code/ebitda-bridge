@@ -55,3 +55,10 @@ linha da aba).
 - Exportar dados atuais para o formato: `pnpm --filter @workspace/scripts run export-indicadores`
   → gera `exports/Fonte_Indicadores_Bridge_EBITDA.xlsx` (aba única "Indicadores").
 - Importar a aba única para o banco: `pnpm --filter @workspace/scripts run import-indicadores [caminho.xlsx]`
+- Importar direto da tabela do Databricks (mesmas colunas, mesmas validações):
+  `pnpm --filter @workspace/scripts run import-databricks <catalogo.schema.tabela>`
+  (ou defina `DATABRICKS_INDICADORES_TABLE`). Requer o conector
+  "Databricks (Service Principal)" configurado no workspace Replit
+  (Settings → Connectors) e, se o conector não trouxer o warehouse,
+  a variável `DATABRICKS_WAREHOUSE_ID`. Erros de formato apontam o
+  registro problemático ("Registro N"), como na importação do Excel.

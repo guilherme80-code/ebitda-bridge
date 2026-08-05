@@ -8,6 +8,7 @@
     "import-bridge": "tsx ./src/import-bridge.ts",
     "export-indicadores": "tsx ./src/export-indicadores.ts",
     "import-indicadores": "tsx ./src/import-indicadores.ts",
+    "import-databricks": "tsx ./src/import-databricks.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
