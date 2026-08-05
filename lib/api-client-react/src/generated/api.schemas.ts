@@ -176,6 +176,24 @@ export interface BridgeTables {
   tables: BridgeTable[];
 }
 
+export interface SimulateBridgeBody {
+  /** Natural-language what-if instruction in Portuguese. */
+  prompt: string;
+}
+
+export interface SimulateBridgeResponse {
+  title: string;
+  unit: string;
+  /** Human-readable summary of how the prompt was interpreted. */
+  interpretation: string;
+  /** Descriptions of the adjustments actually applied. */
+  adjustments: string[];
+  /** Simulated waterfall steps (same shape as the base bridge). */
+  steps: BridgeStep[];
+  /** Difference between the simulated and the original final EBITDA, in MUSD. */
+  deltaEbitda: number;
+}
+
 /**
  * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */
@@ -209,6 +227,17 @@ target?: TargetScenarioParameter;
 };
 
 export type GetBridgeTablesParams = {
+/**
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
+ */
+source?: SourceScenarioParameter;
+/**
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
+ */
+target?: TargetScenarioParameter;
+};
+
+export type SimulateBridgeParams = {
 /**
  * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */

@@ -122,6 +122,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /bridge/simulate:
+    post:
+      operationId: simulateBridge
+      tags: [bridge]
+      summary: Simulate a what-if scenario from a natural-language prompt
+      description: Interprets a Portuguese natural-language prompt (e.g. "se a venda de Calvert no MRF7 for 10% maior") into structured adjustments, applies them to the raw data of the selected scenario pair and recomputes the bridge.
+      parameters:
+        - $ref: "#/components/parameters/SourceScenario"
+        - $ref: "#/components/parameters/TargetScenario"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimulateBridgeBody"
+      responses:
+        "200":
+          description: Simulated bridge
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulateBridgeResponse"
+        "400":
+          description: Prompt could not be interpreted, no adjustment matched, or period-kind mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: No bridge for the selected scenario pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /bridge/summary:
     get:
       operationId: getBridgeSummary
@@ -379,6 +413,37 @@ components:
           items:
             $ref: "#/components/schemas/BridgeTable"
       required: [title, unit, tables]
+    SimulateBridgeBody:
+      type: object
+      properties:
+        prompt:
+          type: string
+          description: Natural-language what-if instruction in Portuguese.
+      required: [prompt]
+    SimulateBridgeResponse:
+      type: object
+      properties:
+        title:
+          type: string
+        unit:
+          type: string
+        interpretation:
+          type: string
+          description: Human-readable summary of how the prompt was interpreted.
+        adjustments:
+          type: array
+          description: Descriptions of the adjustments actually applied.
+          items:
+            type: string
+        steps:
+          type: array
+          description: Simulated waterfall steps (same shape as the base bridge).
+          items:
+            $ref: "#/components/schemas/BridgeStep"
+        deltaEbitda:
+          type: number
+          description: Difference between the simulated and the original final EBITDA, in MUSD.
+      required: [title, unit, interpretation, adjustments, steps, deltaEbitda]
     BridgeImpactHighlight:
       type: object
       properties:

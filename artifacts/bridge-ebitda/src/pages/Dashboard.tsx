@@ -9,6 +9,8 @@ import { WaterfallChart } from '../components/WaterfallChart';
 import { SummaryCards } from '../components/SummaryCards';
 import { DrillDownDrawer } from '../components/DrillDownDrawer';
 import { DetailedTables } from '../components/DetailedTables';
+import { ScenarioSimulator } from '../components/ScenarioSimulator';
+import type { SimulateBridgeResponse } from '@workspace/api-client-react';
 import { ScenarioSelector } from '../components/ScenarioSelector';
 import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -46,6 +48,7 @@ export default function Dashboard() {
   });
 
   const [selectedComponent, setSelectedComponent] = useState<{key: string, label: string} | null>(null);
+  const [simulation, setSimulation] = useState<SimulateBridgeResponse | null>(null);
 
   const isLoading = loadingCatalog || (pairSelected && (loadingBridge || loadingSummary));
   const isError = errorCatalog || errorBridge || errorSummary;
@@ -77,6 +80,7 @@ export default function Dashboard() {
               onChange={(s, t) => {
                 setSourceId(s);
                 setTargetId(t);
+                setSimulation(null);
               }}
             />
           </div>
@@ -110,18 +114,39 @@ export default function Dashboard() {
         )}
 
         {!isLoading && !isError && bridge && (
+          <ScenarioSimulator
+            source={sourceId ?? undefined}
+            target={targetId ?? undefined}
+            enabled={pairAvailable}
+            simulation={simulation}
+            onResult={setSimulation}
+          />
+        )}
+
+        {!isLoading && !isError && bridge && (
           <main className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-6 flex flex-col animate-in fade-in slide-in-from-bottom-8 duration-700 delay-150 fill-mode-both">
             <div className="mb-8 px-4 pt-4 sm:p-0 flex flex-col sm:flex-row sm:justify-between sm:items-end">
               <div>
-                <h2 className="text-xl font-bold text-slate-800">Composição da Variação de EBITDA</h2>
-                <p className="text-sm font-medium text-slate-500 mt-1">Clique nas alavancas com detalhamento para análise aprofundada (drill-down).</p>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Composição da Variação de EBITDA
+                  {simulation && (
+                    <span className="ml-3 align-middle text-[10px] font-bold uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-full">
+                      Simulação
+                    </span>
+                  )}
+                </h2>
+                <p className="text-sm font-medium text-slate-500 mt-1">
+                  {simulation
+                    ? 'Visão simulada — limpe a simulação para voltar ao bridge original.'
+                    : 'Clique nas alavancas com detalhamento para análise aprofundada (drill-down).'}
+                </p>
               </div>
             </div>
             <div className="w-full h-[480px]">
               <WaterfallChart 
-                steps={bridge.steps} 
+                steps={simulation ? simulation.steps : bridge.steps} 
                 onBarClick={(step) => {
-                  if (step.hasDetail) setSelectedComponent({ key: step.key, label: step.label });
+                  if (step.hasDetail && !simulation) setSelectedComponent({ key: step.key, label: step.label });
                 }}
               />
             </div>

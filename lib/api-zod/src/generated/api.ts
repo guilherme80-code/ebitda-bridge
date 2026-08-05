@@ -117,6 +117,36 @@ export const GetBridgeTablesResponse = zod.object({
 
 
 /**
+ * Interprets a Portuguese natural-language prompt (e.g. "se a venda de Calvert no MRF7 for 10% maior") into structured adjustments, applies them to the raw data of the selected scenario pair and recomputes the bridge.
+ * @summary Simulate a what-if scenario from a natural-language prompt
+ */
+export const SimulateBridgeQueryParams = zod.object({
+  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the first version with imported data.'),
+  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the most recent version with imported data.')
+})
+
+export const SimulateBridgeBody = zod.object({
+  "prompt": zod.string().describe('Natural-language what-if instruction in Portuguese.')
+})
+
+export const SimulateBridgeResponse = zod.object({
+  "title": zod.string(),
+  "unit": zod.string(),
+  "interpretation": zod.string().describe('Human-readable summary of how the prompt was interpreted.'),
+  "adjustments": zod.array(zod.string()).describe('Descriptions of the adjustments actually applied.'),
+  "steps": zod.array(zod.object({
+  "key": zod.string().describe('Stable identifier of the component (e.g. vol_mix, selling_price).'),
+  "label": zod.string().describe('Display label in Portuguese.'),
+  "value": zod.number().describe('Impact in MUSD (positive or negative). For totals, the absolute level.'),
+  "cumulative": zod.number().describe('Cumulative EBITDA level after this step, in MUSD.'),
+  "kind": zod.enum(['total_start', 'delta', 'total_end']),
+  "hasDetail": zod.boolean().describe('Whether a drill-down detail exists for this component.')
+}).describe('One bar of the waterfall chart, in MUSD.')).describe('Simulated waterfall steps (same shape as the base bridge).'),
+  "deltaEbitda": zod.number().describe('Difference between the simulated and the original final EBITDA, in MUSD.')
+})
+
+
+/**
  * Returns headline figures — start, end, total variation, largest positive and negative impacts.
  * @summary Get executive summary of the bridge
  */

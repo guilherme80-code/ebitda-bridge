@@ -6,11 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
+  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
@@ -26,11 +30,14 @@ import type {
   GetBridgeSummaryParams,
   GetBridgeTablesParams,
   HealthStatus,
-  ScenarioCatalog
+  ScenarioCatalog,
+  SimulateBridgeBody,
+  SimulateBridgeParams,
+  SimulateBridgeResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
-import type { ErrorType } from '../custom-fetch';
+import type { ErrorType , BodyType } from '../custom-fetch';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -471,6 +478,86 @@ export function useGetBridgeTables<TData = Awaited<ReturnType<typeof getBridgeTa
 
 
 
+
+export const getSimulateBridgeUrl = (params?: SimulateBridgeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bridge/simulate?${stringifiedParams}` : `/api/bridge/simulate`
+}
+
+/**
+ * Interprets a Portuguese natural-language prompt (e.g. "se a venda de Calvert no MRF7 for 10% maior") into structured adjustments, applies them to the raw data of the selected scenario pair and recomputes the bridge.
+ * @summary Simulate a what-if scenario from a natural-language prompt
+ */
+export const simulateBridge = async (simulateBridgeBody: SimulateBridgeBody,
+    params?: SimulateBridgeParams, options?: Parameters<typeof customFetch>[1]): Promise<SimulateBridgeResponse> => {
+
+  return customFetch<SimulateBridgeResponse>(getSimulateBridgeUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(simulateBridgeBody)
+  }
+);}
+
+
+
+
+
+export const getSimulateBridgeMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof simulateBridge>>, TError,{data: BodyType<SimulateBridgeBody>;params?: SimulateBridgeParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof simulateBridge>>, TError,{data: BodyType<SimulateBridgeBody>;params?: SimulateBridgeParams}, TContext> => {
+
+const mutationKey = ['simulateBridge'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof simulateBridge>>, {data: BodyType<SimulateBridgeBody>;params?: SimulateBridgeParams}> = (props) => {
+          const {data,params} = props ?? {};
+
+          return  simulateBridge(data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SimulateBridgeMutationResult = NonNullable<Awaited<ReturnType<typeof simulateBridge>>>
+    export type SimulateBridgeMutationBody = BodyType<SimulateBridgeBody>
+    export type SimulateBridgeMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Simulate a what-if scenario from a natural-language prompt
+ */
+export const useSimulateBridge = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof simulateBridge>>, TError,{data: BodyType<SimulateBridgeBody>;params?: SimulateBridgeParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof simulateBridge>>,
+        TError,
+        {data: BodyType<SimulateBridgeBody>;params?: SimulateBridgeParams},
+        TContext
+      > => {
+      return useMutation(getSimulateBridgeMutationOptions(options));
+    }
 
 export const getGetBridgeSummaryUrl = (params?: GetBridgeSummaryParams,) => {
   const normalizedParams = new URLSearchParams();

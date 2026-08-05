@@ -18,7 +18,15 @@ import {
   GetBridgeSummaryResponse,
   GetBridgeTablesResponse,
   ListScenariosResponse,
+  SimulateBridgeBody,
+  SimulateBridgeResponse,
 } from "@workspace/api-zod";
+import { openai } from "@workspace/integrations-openai-ai-server";
+import {
+  simulateBridge,
+  buildCatalog,
+  type Adjustment,
+} from "../lib/simulate";
 import { computeBridge, type RawScenarioData } from "../lib/bridge-calc";
 
 const router: IRouter = Router();
@@ -268,6 +276,157 @@ router.get("/bridge/components/:key", async (req, res): Promise<void> => {
       value: pair.bridge.drivers[driver.key] ?? 0,
       unit: UNIT,
       lines,
+    }),
+  );
+});
+
+const ADJUSTMENT_SCOPES = new Set([
+  "sales_qty",
+  "sales_price",
+  "fixed_cost",
+  "input_price",
+  "usage",
+  "others",
+  "fx",
+]);
+
+router.post("/bridge/simulate", async (req, res): Promise<void> => {
+  const body = SimulateBridgeBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Informe um prompt de simulação." });
+    return;
+  }
+
+  const pair = await resolvePair(
+    firstStr(req.query.source),
+    firstStr(req.query.target),
+  );
+  if (!pair) {
+    res.status(404).json({ error: NO_DATA_ERROR });
+    return;
+  }
+  if ("kindMismatch" in pair) {
+    res.status(400).json({ error: KIND_MISMATCH_ERROR });
+    return;
+  }
+
+  const raw = await loadRaw([pair.source.id, pair.target.id]);
+  const rawSource = raw.get(pair.source.id)!;
+  const rawTarget = raw.get(pair.target.id)!;
+  const catalog = buildCatalog(rawSource, rawTarget);
+
+  const system = `Você interpreta instruções de simulação ("what-if") de um bridge de EBITDA de uma siderúrgica e responde APENAS com JSON válido.
+
+Par comparado: origem = "${pair.source.label}" (versão ${pair.source.version}), destino = "${pair.target.label}" (versão ${pair.target.version}).
+
+Itens ajustáveis (use os rótulos EXATOS):
+- sales_qty / sales_price (produtos de venda): ${JSON.stringify(catalog.sales)}
+- fixed_cost (categorias de custo fixo): ${JSON.stringify(catalog.fixed_cost)}
+- input_price (insumos): ${JSON.stringify(catalog.input_price)}
+- usage (linhas de consumo): ${JSON.stringify(catalog.usage)}
+- others (estoque/outros): ${JSON.stringify(catalog.others)}
+- fx (câmbio BRL/USD): key = "fx"
+
+Formato de saída:
+{"interpretation": "frase curta em pt-BR resumindo o que será simulado",
+ "adjustments": [{"scope": "sales_qty|sales_price|fixed_cost|input_price|usage|others|fx", "scenario": "source|target", "key": "<rótulo exato>", "pct": <número ou null>, "abs": <número ou null>}]}
+
+Regras:
+- "venda X maior/menor em N%" sem menção a preço → sales_qty com pct ±N.
+- Menções a preço de venda → sales_price. Preço de matéria-prima/insumo (coal, PCI, coke, pellets...) → input_price.
+- "no MRF7"/"no destino"/versão do destino → scenario "target"; "no Budget"/origem → "source". Sem indicação → "target".
+- pct: use sinal (queda de 10% → -10). abs: kt para volume, USD/t para preços, MUSD para montantes.
+- Se o pedido não fizer sentido ou não corresponder a nenhum item, devolva {"interpretation": "...explicação...", "adjustments": []}.`;
+
+  let parsed: { interpretation?: string; adjustments?: Adjustment[] };
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.6-terra",
+      max_completion_tokens: 8192,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: body.data.prompt },
+      ],
+    });
+    parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+  } catch (err) {
+    console.error("simulate: falha ao interpretar prompt", err);
+    res.status(400).json({
+      error: "Não foi possível interpretar o prompt. Tente reformular.",
+    });
+    return;
+  }
+
+  const adjustments = (parsed.adjustments ?? []).filter(
+    (a) =>
+      a &&
+      ADJUSTMENT_SCOPES.has(a.scope) &&
+      (a.scenario === "source" || a.scenario === "target") &&
+      typeof a.key === "string" &&
+      (typeof a.pct === "number" || typeof a.abs === "number"),
+  );
+  if (!adjustments.length) {
+    res.status(400).json({
+      error:
+        parsed.interpretation ||
+        "Não identifiquei nenhum ajuste no prompt. Ex.: \"venda de Slab Calvert 10% maior no MRF7\".",
+    });
+    return;
+  }
+
+  const outcome = simulateBridge(rawSource, rawTarget, adjustments, {
+    source: pair.source.label,
+    target: pair.target.label,
+  });
+  if (!outcome.applied.length) {
+    res.status(400).json({
+      error: `Não encontrei os itens citados (${outcome.notFound.join(", ")}).`,
+    });
+    return;
+  }
+
+  const { start, end, drivers, details } = outcome.bridge;
+  let cumulative = start;
+  const steps = [
+    {
+      key: "ebitda_source",
+      label: `EBITDA ${pair.source.label}`,
+      value: start,
+      cumulative: start,
+      kind: "total_start",
+      hasDetail: false,
+    },
+    ...BRIDGE_DRIVERS.map((d) => {
+      const value = drivers[d.key] ?? 0;
+      cumulative += value;
+      return {
+        key: d.key,
+        label: d.label,
+        value,
+        cumulative,
+        kind: "delta",
+        hasDetail: (details[d.key]?.length ?? 0) > 0,
+      };
+    }),
+    {
+      key: "ebitda_target",
+      label: `EBITDA ${pair.target.label} (simulado)`,
+      value: end,
+      cumulative: end,
+      kind: "total_end",
+      hasDetail: false,
+    },
+  ];
+
+  res.json(
+    SimulateBridgeResponse.parse({
+      title: `Simulação — ${pair.source.label} vs ${pair.target.label}`,
+      unit: UNIT,
+      interpretation: parsed.interpretation ?? outcome.applied.join("; "),
+      adjustments: outcome.applied,
+      steps,
+      deltaEbitda: end - pair.bridge.end,
     }),
   );
 });
