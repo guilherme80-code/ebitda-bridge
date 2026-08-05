@@ -1,10 +1,13 @@
 import { Router, type IRouter } from "express";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, inArray } from "drizzle-orm";
 import {
   db,
   scenariosTable,
-  scenarioFactsTable,
-  scenarioDetailFactsTable,
+  scenarioParamsTable,
+  salesFactsTable,
+  fixedCostFactsTable,
+  inputPriceFactsTable,
+  miscFactsTable,
   BRIDGE_DRIVERS,
   type Scenario,
 } from "@workspace/db";
@@ -15,6 +18,7 @@ import {
   GetBridgeSummaryResponse,
   ListScenariosResponse,
 } from "@workspace/api-zod";
+import { computeBridge, type RawScenarioData } from "../lib/bridge-calc";
 
 const router: IRouter = Router();
 
@@ -29,25 +33,26 @@ function firstStr(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
-type Facts = Map<string, number>; // metric -> valueMusd
-
 async function loadCatalog() {
-  const [scenarios, facts] = await Promise.all([
+  const [scenarios, withParams, withSales] = await Promise.all([
     db.select().from(scenariosTable).orderBy(asc(scenariosTable.sortOrder)),
     db
-      .select({ scenarioId: scenarioFactsTable.scenarioId })
-      .from(scenarioFactsTable)
-      .where(eq(scenarioFactsTable.metric, "ebitda")),
+      .select({ scenarioId: scenarioParamsTable.scenarioId })
+      .from(scenarioParamsTable),
+    db
+      .selectDistinct({ scenarioId: salesFactsTable.scenarioId })
+      .from(salesFactsTable),
   ]);
-  const withData = new Set(facts.map((f) => f.scenarioId));
+  // Um cenário "tem dados" quando existem parâmetros E linhas de vendas —
+  // evita calcular um bridge enganoso a partir de importação parcial
+  // (o plug de estoque fecharia a ponte mesmo faltando dados brutos).
+  const salesIds = new Set(withSales.map((s) => s.scenarioId));
+  const withData = new Set(
+    withParams.map((p) => p.scenarioId).filter((id) => salesIds.has(id)),
+  );
   return { scenarios, withData };
 }
 
-/**
- * Resolve the source/target scenarios for the request, computing their facts.
- * Missing params fall back to the default pair (first/last version with data).
- * Returns undefined when either scenario is unknown or has no imported data.
- */
 function defaultPair(scenarios: Scenario[], withData: Set<string>) {
   // Preferência: par real FY26 Budget → FY26 MRF7; senão, primeiro/último
   // cenário anual com dados.
@@ -62,6 +67,47 @@ function defaultPair(scenarios: Scenario[], withData: Set<string>) {
   return { sourceId: years[0].id, targetId: years[years.length - 1].id };
 }
 
+/** Carrega os dados brutos (vendas, custo fixo, insumos, misc) de um cenário. */
+async function loadRaw(ids: string[]): Promise<Map<string, RawScenarioData>> {
+  const [params, sales, fixed, inputs, misc] = await Promise.all([
+    db
+      .select()
+      .from(scenarioParamsTable)
+      .where(inArray(scenarioParamsTable.scenarioId, ids)),
+    db
+      .select()
+      .from(salesFactsTable)
+      .where(inArray(salesFactsTable.scenarioId, ids)),
+    db
+      .select()
+      .from(fixedCostFactsTable)
+      .where(inArray(fixedCostFactsTable.scenarioId, ids)),
+    db
+      .select()
+      .from(inputPriceFactsTable)
+      .where(inArray(inputPriceFactsTable.scenarioId, ids)),
+    db
+      .select()
+      .from(miscFactsTable)
+      .where(inArray(miscFactsTable.scenarioId, ids)),
+  ]);
+  const out = new Map<string, RawScenarioData>();
+  for (const p of params) {
+    out.set(p.scenarioId, {
+      params: p,
+      sales: sales.filter((r) => r.scenarioId === p.scenarioId),
+      fixed: fixed.filter((r) => r.scenarioId === p.scenarioId),
+      inputs: inputs.filter((r) => r.scenarioId === p.scenarioId),
+      misc: misc.filter((r) => r.scenarioId === p.scenarioId),
+    });
+  }
+  return out;
+}
+
+/**
+ * Resolve o par origem/destino e calcula o bridge na hora a partir dos dados
+ * brutos, seguindo as fórmulas da aba "Cálculo".
+ */
 async function resolvePair(sourceId?: string, targetId?: string) {
   const { scenarios, withData } = await loadCatalog();
   const def = defaultPair(scenarios, withData);
@@ -84,41 +130,13 @@ async function resolvePair(sourceId?: string, targetId?: string) {
     return { kindMismatch: true as const };
   }
 
-  const factRows = await db
-    .select()
-    .from(scenarioFactsTable)
-    .where(inArray(scenarioFactsTable.scenarioId, [source.id, target.id]));
-  const factsOf = (id: string): Facts =>
-    new Map(
-      factRows.filter((f) => f.scenarioId === id).map((f) => [f.metric, f.valueMusd]),
-    );
-  return {
-    source,
-    target,
-    sourceFacts: factsOf(source.id),
-    targetFacts: factsOf(target.id),
-  };
-}
+  const raw = await loadRaw([source.id, target.id]);
+  const rawSource = raw.get(source.id);
+  const rawTarget = raw.get(target.id);
+  if (!rawSource || !rawTarget) return undefined;
 
-function level(facts: Facts, metric: string): number {
-  return facts.get(metric) ?? 0;
-}
-
-/** Compute the waterfall steps on the fly: delta = target − source per driver. */
-function computeSteps(pair: {
-  source: Scenario;
-  target: Scenario;
-  sourceFacts: Facts;
-  targetFacts: Facts;
-}) {
-  const start = level(pair.sourceFacts, "ebitda");
-  const end = level(pair.targetFacts, "ebitda");
-  const deltas = BRIDGE_DRIVERS.map((d) => ({
-    key: d.key,
-    label: d.label,
-    value: level(pair.targetFacts, d.key) - level(pair.sourceFacts, d.key),
-  }));
-  return { start, end, deltas };
+  const bridge = computeBridge(rawSource, rawTarget);
+  return { source, target, bridge };
 }
 
 function bridgeTitle(source: Scenario, target: Scenario) {
@@ -161,18 +179,7 @@ router.get("/bridge", async (req, res): Promise<void> => {
     return;
   }
 
-  const { start, end, deltas } = computeSteps(pair);
-  const detailRows = await db
-    .select({ componentKey: scenarioDetailFactsTable.componentKey })
-    .from(scenarioDetailFactsTable)
-    .where(
-      inArray(scenarioDetailFactsTable.scenarioId, [
-        pair.source.id,
-        pair.target.id,
-      ]),
-    );
-  const withDetail = new Set(detailRows.map((r) => r.componentKey));
-
+  const { start, end, drivers, details } = pair.bridge;
   let cumulative = start;
   const steps = [
     {
@@ -183,15 +190,16 @@ router.get("/bridge", async (req, res): Promise<void> => {
       kind: "total_start",
       hasDetail: false,
     },
-    ...deltas.map((d) => {
-      cumulative += d.value;
+    ...BRIDGE_DRIVERS.map((d) => {
+      const value = drivers[d.key] ?? 0;
+      cumulative += value;
       return {
         key: d.key,
         label: d.label,
-        value: d.value,
+        value,
         cumulative,
         kind: "delta",
-        hasDetail: withDetail.has(d.key),
+        hasDetail: (details[d.key]?.length ?? 0) > 0,
       };
     }),
     {
@@ -238,68 +246,25 @@ router.get("/bridge/components/:key", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Componente não encontrado" });
     return;
   }
-
-  const rows = await db
-    .select()
-    .from(scenarioDetailFactsTable)
-    .where(
-      inArray(scenarioDetailFactsTable.scenarioId, [
-        pair.source.id,
-        pair.target.id,
-      ]),
-    );
-  const forKey = rows.filter((r) => r.componentKey === driver.key);
-  if (forKey.length === 0) {
+  const detail = pair.bridge.details[driver.key] ?? [];
+  if (detail.length === 0) {
     res.status(404).json({ error: "Componente não encontrado" });
     return;
   }
 
-  // Diff detail lines on the fly: target level − source level per (group, label).
-  // Missing rows mean level 0 (BUDGET is the common reference).
-  type LineAgg = {
-    label: string;
-    group: string | null;
-    value: number;
-    sortOrder: number;
-  };
-  const byId = new Map<string, LineAgg>();
-  for (const r of forKey) {
-    const id = `${r.group ?? ""}\u0000${r.label}`;
-    const sign = r.scenarioId === pair.target.id ? 1 : -1;
-    const existing = byId.get(id);
-    if (existing) {
-      existing.value += sign * r.valueMusd;
-      existing.sortOrder = Math.min(existing.sortOrder, r.sortOrder);
-    } else {
-      byId.set(id, {
-        label: r.label,
-        group: r.group,
-        value: sign * r.valueMusd,
-        sortOrder: r.sortOrder,
-      });
-    }
-  }
-  const lines = [...byId.values()]
-    .sort(
-      (a, b) =>
-        (a.group ?? "").localeCompare(b.group ?? "") || a.sortOrder - b.sortOrder,
-    )
-    .map((l, i) => ({
-      id: i + 1,
-      label: l.label,
-      group: l.group,
-      value: l.value,
-      sortOrder: l.sortOrder,
-    }));
-
-  const value =
-    level(pair.targetFacts, driver.key) - level(pair.sourceFacts, driver.key);
+  const lines = detail.map((l, i) => ({
+    id: i + 1,
+    label: l.label,
+    group: l.group,
+    value: l.value,
+    sortOrder: l.sortOrder,
+  }));
 
   res.json(
     GetBridgeComponentResponse.parse({
       key: driver.key,
       label: driver.label,
-      value,
+      value: pair.bridge.drivers[driver.key] ?? 0,
       unit: UNIT,
       lines,
     }),
@@ -320,7 +285,12 @@ router.get("/bridge/summary", async (req, res): Promise<void> => {
     return;
   }
 
-  const { start, end, deltas } = computeSteps(pair);
+  const { start, end, drivers } = pair.bridge;
+  const deltas = BRIDGE_DRIVERS.map((d) => ({
+    key: d.key,
+    label: d.label,
+    value: drivers[d.key] ?? 0,
+  }));
   const largestPositive = deltas.reduce((a, b) => (b.value > a.value ? b : a));
   const largestNegative = deltas.reduce((a, b) => (b.value < a.value ? b : a));
   const positiveTotal = deltas

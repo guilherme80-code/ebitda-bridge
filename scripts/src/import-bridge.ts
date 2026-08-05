@@ -1,21 +1,16 @@
 /**
- * Semeia o banco com cenários por versão e período.
+ * Semeia o banco com DADOS BRUTOS (quantidade e montante) por versão/período,
+ * conforme a estrutura da aba "Cálculo" do Modelo Bridge.xlsx.
  *
- * - FY26 (ano cheio): BUDGET e MRF7 vêm dos dados reais da aba "Cálculo" do
- *   Excel (attached_assets/Modelo_Bridge_*.xlsx) — 632,0 → 747,7 MUSD.
- * - Todas as demais combinações (FY25/FY26/FY27 × BUDGET/MRF1..MRF7 ×
- *   ano/trimestre/mês) recebem dados de exemplo gerados de forma
- *   determinística (mesma semente → mesmos números a cada execução).
+ * - FY26 BUDGET e FY26 MRF7 (ano cheio): dados reais extraídos do Excel
+ *   (vendas por produto, custo variável, custo fixo, câmbio, insumos,
+ *   consumo, others e variação de estoque).
+ * - Meses/trimestres e versões MRF1..MRF6: dados fictícios determinísticos
+ *   (interpolação entre Budget e MRF7 com ruído estável), com meses somando
+ *   o trimestre e trimestres somando o ano.
  *
- * Modelo: por cenário guardamos o nível de EBITDA e, por driver/linha de
- * detalhe, o nível acumulado relativo à referência comum (BUDGET FY26 = 0).
- * O bridge de qualquer par origem→destino do MESMO tipo de período
- * (ano×ano, trimestre×trimestre, mês×mês) é calculado na hora como
- * destino − origem.
- *
- * Consistência garantida: meses somam o trimestre, trimestres somam o ano,
- * e o EBITDA de cada cenário = base do período + soma dos níveis de driver —
- * logo qualquer bridge fecha exatamente.
+ * Nenhum efeito é pré-calculado — o painel calcula preço, volume, mix,
+ * câmbio, custo fixo, insumos etc. na hora da comparação.
  */
 import path from "node:path";
 import * as fs from "node:fs";
@@ -24,12 +19,17 @@ import {
   db,
   pool,
   scenariosTable,
-  scenarioFactsTable,
-  scenarioDetailFactsTable,
-  BRIDGE_DRIVERS,
+  scenarioParamsTable,
+  salesFactsTable,
+  fixedCostFactsTable,
+  inputPriceFactsTable,
+  miscFactsTable,
   type InsertScenario,
-  type InsertScenarioFact,
-  type InsertScenarioDetailFact,
+  type InsertScenarioParams,
+  type InsertSalesFact,
+  type InsertFixedCostFact,
+  type InsertInputPriceFact,
+  type InsertMiscFact,
 } from "@workspace/db";
 
 const XLSX_PATH = path.resolve(
@@ -38,18 +38,33 @@ const XLSX_PATH = path.resolve(
 );
 
 // ---------- utilidades ----------
-function num(sheet: XLSX.WorkSheet, addr: string): number {
+type Sheet = XLSX.WorkSheet;
+function num(sheet: Sheet, addr: string): number {
   const cell = sheet[addr] as { v?: unknown } | undefined;
-  const v = cell?.v;
-  return typeof v === "number" ? v : 0;
+  return typeof cell?.v === "number" ? cell.v : 0;
 }
-function str(sheet: XLSX.WorkSheet, addr: string): string | null {
+function numOr(sheet: Sheet, addr: string): number | null {
   const cell = sheet[addr] as { v?: unknown } | undefined;
-  const v = cell?.v;
-  return typeof v === "string" ? v.trim() : null;
+  return typeof cell?.v === "number" ? cell.v : null;
+}
+function str(sheet: Sheet, addr: string): string | null {
+  const cell = sheet[addr] as { v?: unknown } | undefined;
+  return typeof cell?.v === "string" ? cell.v.trim() : null;
+}
+function hasFormula(sheet: Sheet, addr: string): boolean {
+  const cell = sheet[addr] as { f?: string } | undefined;
+  return !!cell?.f;
+}
+function slug(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
-// RNG determinístico (mulberry32) para dados de exemplo estáveis entre execuções.
+// RNG determinístico (mulberry32) — dados fictícios estáveis entre execuções.
 function mulberry32(seed: number) {
   let a = seed >>> 0;
   return () => {
@@ -63,154 +78,292 @@ function mulberry32(seed: number) {
 const rnd = mulberry32(20260805);
 const between = (lo: number, hi: number) => lo + (hi - lo) * rnd();
 
+/** Divide um total em 12 parcelas com sazonalidade, somando exatamente o total. */
+function splitMonthly(total: number, weights: number[]): number[] {
+  const wSum = weights.reduce((s, w) => s + w, 0);
+  const parts = weights.map((w) => (total * w) / wSum);
+  parts[11] += total - parts.reduce((s, p) => s + p, 0);
+  return parts;
+}
+
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-const YEARS = [2026];
 const VERSIONS = ["BUDGET", "MRF1", "MRF2", "MRF3", "MRF4", "MRF5", "MRF6", "MRF7"];
+const YEAR = 26;
+
+// linhas de receita expostas ao câmbio (soma de H150 na aba Cálculo)
+const DOMESTIC_ROWS = new Set([
+  20, 21, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 35, 36, 37, 39, 40, 41, 42, 43, 45, 46, 47,
+]);
+// categorias de custo fixo sem separação cambial (denominadas em USD)
+const USD_FIXED_ROWS = new Set([118, 120, 122, 124]);
 
 async function main() {
-  // ---------- dados reais FY26 (Excel) ----------
-  const wb = XLSX.read(fs.readFileSync(XLSX_PATH));
+  const wb = XLSX.read(fs.readFileSync(XLSX_PATH), { cellFormula: true });
   const calc = wb.Sheets["Cálculo"];
-  if (!calc) throw new Error("Aba 'Cálculo' não encontrada no Excel");
+  if (!calc) throw new Error("Aba 'Cálculo' não encontrada");
 
-  const start = num(calc, "C3"); // EBITDA FY26'B = 632.044
-  const forex = num(calc, "C4");
-  const sellingPrice = num(calc, "C5");
-  const volume = num(calc, "C6");
-  const mix = num(calc, "C7");
-  const fixedCost = num(calc, "C8");
-  const inputPrice = num(calc, "C9");
-  const usage = num(calc, "C10");
-  const others = num(calc, "C11");
-  const stockVariation = num(calc, "C12");
-  const end = num(calc, "C13"); // EBITDA FY26'F7 = 747.692
-
-  const realDeltas: Record<string, number> = {
-    vol_mix: volume + mix,
-    selling_price: sellingPrice,
-    input_price: inputPrice,
-    usage: usage,
-    fixed_cost: fixedCost,
-    forex: forex,
-    sv_others: others + stockVariation,
+  // ---------- extração dos dados brutos reais (FY26 B e FY26 MRF7) ----------
+  // Vendas (17-47) + custo variável (50-80, mesma ordem de produtos)
+  type SalesRaw = {
+    key: string;
+    label: string;
+    currency: "BRL" | "USD";
+    domestic: boolean;
+    sortOrder: number;
+    b: { qty: number; amt: number; vc: number };
+    t: { qty: number; amt: number; vc: number };
   };
-  const computedEnd =
-    start + Object.values(realDeltas).reduce((s, v) => s + v, 0);
-  if (Math.abs(computedEnd - end) > 0.01) {
-    throw new Error(
-      `Bridge não fecha: início ${start} + deltas = ${computedEnd}, esperado ${end}`,
-    );
+  const salesRaw: SalesRaw[] = [];
+  for (let r = 17; r <= 47; r++) {
+    const vr = r + 33; // linha de custo variável correspondente (50-80)
+    const label = str(calc, `B${r}`) ?? str(calc, `B${vr}`) ?? `Produto ${r}`;
+    // custo variável unitário: coluna D do bloco 50-80 (USD/t) — definido
+    // mesmo quando a quantidade é zero (produtos novos). A aba usa o mesmo
+    // custo unitário para os dois cenários.
+    const unitVc = num(calc, `D${vr}`) / 1000; // kUSD/kt... (USD/t ÷ 1000)
+    const qtyB0 = num(calc, `C${r}`);
+    const qtyT0 = num(calc, `F${r}`);
+    const row: SalesRaw = {
+      key: slug(label),
+      label,
+      currency: hasFormula(calc, `L${r}`) ? "BRL" : "USD",
+      domestic: DOMESTIC_ROWS.has(r),
+      sortOrder: r - 17,
+      b: { qty: qtyB0, amt: num(calc, `E${r}`), vc: qtyB0 * unitVc },
+      t: { qty: qtyT0, amt: num(calc, `H${r}`), vc: qtyT0 * unitVc },
+    };
+    if (row.b.qty === 0 && row.t.qty === 0 && row.b.amt === 0 && row.t.amt === 0) continue;
+    salesRaw.push(row);
   }
 
-  // ---------- linhas de produto reais (drill-down FY26 BUDGET→MRF7) ----------
-  type ProdLine = { label: string; price: number; forex: number; volMix: number };
-  const prods: ProdLine[] = [];
-  for (let r = 17; r <= 80; r++) {
-    const label = str(calc, `B${r}`);
-    if (!label || label.startsWith("Total")) continue;
-    prods.push({
-      label,
-      price: num(calc, `P${r}`) / 1000,
-      forex: num(calc, `Q${r}`) / 1000,
-      volMix: num(calc, `K${r + 66}`) / 1000,
+  // Custo fixo (116-124)
+  type FixedRaw = { category: string; usd: boolean; sortOrder: number; b: number; t: number };
+  const fixedRaw: FixedRaw[] = [];
+  for (let r = 116; r <= 124; r++) {
+    const category = str(calc, `B${r}`);
+    if (!category) continue;
+    fixedRaw.push({
+      category,
+      usd: USD_FIXED_ROWS.has(r),
+      sortOrder: r - 116,
+      b: num(calc, `E${r}`),
+      t: num(calc, `H${r}`),
     });
   }
-  const TOP = 10;
-  function topWithRemainder(
-    componentKey: string,
-    total: number,
-    pick: (p: ProdLine) => number,
-    group: string | null,
-  ) {
-    const ranked = prods
-      .map((p) => ({ label: p.label, value: pick(p) }))
-      .filter((p) => Math.abs(p.value) > 0.005)
-      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-      .slice(0, TOP);
-    const sum = ranked.reduce((s, p) => s + p.value, 0);
-    const lines = ranked.map((p, i) => ({
-      componentKey,
-      label: p.label,
-      group,
-      valueMusd: p.value,
-      sortOrder: i,
-    }));
-    const remainder = total - sum;
-    if (Math.abs(remainder) > 0.005) {
-      lines.push({
-        componentKey,
-        label: "Demais itens e ajustes",
-        group,
-        valueMusd: remainder,
-        sortOrder: lines.length,
-      });
-    }
-    return lines;
+
+  // Câmbio e produção de aço bruto
+  const fxB = num(calc, "E152");
+  const fxT = num(calc, "H152");
+  // câmbio próprio do bloco de custo fixo (E125/H125)
+  const fcFxB = num(calc, "E125");
+  const fcFxT = num(calc, "H125");
+  const crudeSteelKt = num(calc, "G144") * 1000; // G144 já está /1000
+
+  // Insumos precificados (128-134) e diretos (135-143)
+  type InputRaw = {
+    item: string;
+    sortOrder: number;
+    priceB?: number;
+    priceT?: number;
+    yieldF?: number;
+    levelB?: number;
+    levelT?: number;
+  };
+  const inputRaw: InputRaw[] = [];
+  for (let r = 128; r <= 134; r++) {
+    const item = str(calc, `B${r}`);
+    if (!item) continue;
+    inputRaw.push({
+      item,
+      sortOrder: r - 128,
+      priceB: num(calc, `D${r}`),
+      priceT: num(calc, `G${r}`),
+      yieldF: num(calc, `I${r}`),
+    });
   }
-  const realDetailLines = [
-    { componentKey: "vol_mix", label: "Volume", group: "Resumo", valueMusd: volume, sortOrder: 0 },
-    { componentKey: "vol_mix", label: "Mix", group: "Resumo", valueMusd: mix, sortOrder: 1 },
-    ...topWithRemainder("vol_mix_products", volume + mix, (p) => p.volMix, null).map(
-      (l, i) => ({ ...l, componentKey: "vol_mix", group: "Por produto", sortOrder: 2 + i }),
-    ),
-    ...topWithRemainder("selling_price", sellingPrice, (p) => p.price, "Por produto"),
-    ...topWithRemainder("forex", forex, (p) => p.forex, "Por produto"),
-    { componentKey: "sv_others", label: "Outros (Others)", group: null, valueMusd: others, sortOrder: 0 },
-    { componentKey: "sv_others", label: "Variação de estoque", group: null, valueMusd: stockVariation, sortOrder: 1 },
-    { componentKey: "input_price", label: "Total preço de insumos (aba Cálculo)", group: null, valueMusd: inputPrice, sortOrder: 0 },
-    { componentKey: "usage", label: "Total consumo (aba Cálculo)", group: null, valueMusd: usage, sortOrder: 0 },
-    { componentKey: "fixed_cost", label: "Total custo fixo (aba Cálculo)", group: null, valueMusd: fixedCost, sortOrder: 0 },
+  for (let r = 135; r <= 143; r++) {
+    const item = str(calc, `B${r}`);
+    if (!item) continue;
+    const delta = r === 137 ? num(calc, "G137") - num(calc, "D137") : (numOr(calc, `J${r}`) ?? 0);
+    inputRaw.push({ item, sortOrder: r - 128, levelB: 0, levelT: delta });
+  }
+
+  // Consumo (147) e Others/Estoque (155-181)
+  type MiscRaw = { driver: string; label: string; sortOrder: number; b: number; t: number };
+  const miscRaw: MiscRaw[] = [
+    { driver: "usage", label: "Consumo de insumos", sortOrder: 0, b: 0, t: numOr(calc, "J147") ?? 0 },
   ];
-
-  // ---------- geração dos níveis mensais por (ano, versão, driver) ----------
-  // BUDGET FY26 é a referência (níveis 0). MRF7 FY26 reproduz exatamente os
-  // deltas reais. Demais combinações: exemplo determinístico com magnitude
-  // proporcional aos deltas reais.
-  const BASE_M = start / 12; // base mensal de EBITDA da referência
-
-  // splitMonthly: divide um total anual em 12 parcelas com variação sazonal,
-  // somando exatamente o total.
-  function splitMonthly(total: number): number[] {
-    const weights = MONTHS.map(() => between(0.6, 1.4));
-    const wSum = weights.reduce((s, w) => s + w, 0);
-    const parts = weights.map((w) => (total * w) / wSum);
-    // corrige resíduo numérico no último mês
-    const diff = total - parts.reduce((s, p) => s + p, 0);
-    parts[11] += diff;
-    return parts;
+  for (let r = 155; r <= 181; r++) {
+    const label = str(calc, `B${r}`);
+    const tag = str(calc, `J${r}`);
+    if (!label || !tag) continue;
+    const driver = tag === "Others" ? "others" : "stock_variation";
+    const b = numOr(calc, `E${r}`) ?? 0;
+    const t = numOr(calc, `H${r}`) ?? b + (numOr(calc, `I${r}`) ?? 0);
+    if (b === 0 && t === 0) continue;
+    miscRaw.push({ driver, label, sortOrder: r - 155, b, t });
   }
 
-  // monthlyLevels[year][version][driverKey] = número[12]
-  const monthlyLevels = new Map<string, number[]>();
-  const levelKey = (y: number, v: string, d: string) => `${y}|${v}|${d}`;
-  for (const year of YEARS) {
-    for (const version of VERSIONS) {
-      for (const d of BRIDGE_DRIVERS) {
-        let annual: number;
-        if (year === 2026 && version === "BUDGET") {
-          annual = 0;
-        } else if (year === 2026 && version === "MRF7") {
-          annual = realDeltas[d.key];
-        } else {
-          // exemplo: fração do delta real com sinal preservado e ruído
-          const scale = between(-0.4, 1.3);
-          annual = realDeltas[d.key] * scale;
-        }
-        monthlyLevels.set(levelKey(year, version, d.key), splitMonthly(annual));
+  // EBITDA real (kUSD)
+  const ebitdaB = num(calc, "C3") * 1000;
+  const ebitdaT = num(calc, "C13") * 1000;
+
+  console.log(
+    `Extraído do Excel: ${salesRaw.length} produtos, ${fixedRaw.length} categorias de custo fixo, ` +
+      `${inputRaw.length} insumos, ${miscRaw.length} linhas misc | fx ${fxB.toFixed(2)}→${fxT.toFixed(2)} | ` +
+      `EBITDA ${(ebitdaB / 1000).toFixed(1)}→${(ebitdaT / 1000).toFixed(1)} MUSD`,
+  );
+
+  // offset entre EBITDA contábil e (receita − custo var − custo fixo) — usado
+  // para atribuir EBITDA plausível aos cenários fictícios.
+  const marginOf = (side: "b" | "t") =>
+    salesRaw.reduce((s, r) => s + r[side].amt - r[side].vc, 0) -
+    fixedRaw.reduce((s, r) => s + r[side === "b" ? "b" : "t"], 0);
+  const offsetB = ebitdaB - marginOf("b");
+  const offsetT = ebitdaT - marginOf("t");
+
+  // ---------- geração: por versão, 12 meses de dados brutos ----------
+  // t(version): interpolação Budget(0) → MRF7(1) com ruído por produto/mês.
+  const versionT = (vi: number) => vi / (VERSIONS.length - 1);
+
+  interface MonthRaw {
+    sales: Map<string, { qty: number; amt: number; vc: number }>;
+    fixed: Map<string, number>;
+    inputsPrice: Map<string, number>; // preço USD do mês
+    inputsLevel: Map<string, number>;
+    misc: Map<string, number>; // `${driver}|${label}`
+    fx: number;
+    fcFx: number;
+    crudeKt: number;
+    ebitda: number;
+  }
+
+  const monthData = new Map<string, MonthRaw[]>(); // por versão
+
+  for (const [vi, version] of VERSIONS.entries()) {
+    const t = versionT(vi);
+    const isB = version === "BUDGET";
+    const isT = version === "MRF7";
+    const months: MonthRaw[] = MONTHS.map(() => ({
+      sales: new Map(),
+      fixed: new Map(),
+      inputsPrice: new Map(),
+      inputsLevel: new Map(),
+      misc: new Map(),
+      fx: 0,
+      fcFx: 0,
+      crudeKt: 0,
+      ebitda: 0,
+    }));
+
+    // interpolação anual (exata nos extremos, ruído no meio)
+    const lerp = (b: number, tt: number) =>
+      isB ? b : isT ? tt : b + (tt - b) * t * between(0.7, 1.3);
+
+    // vendas
+    for (const row of salesRaw) {
+      const qtyY = lerp(row.b.qty, row.t.qty);
+      const amtY = lerp(row.b.amt, row.t.amt);
+      const vcY = lerp(row.b.vc, row.t.vc);
+      const w = MONTHS.map(() => between(0.7, 1.3));
+      const qtyM = splitMonthly(qtyY, w);
+      const amtM = splitMonthly(amtY, w); // mesmos pesos → preço estável no ano
+      const vcM = splitMonthly(vcY, w);
+      months.forEach((m, i) =>
+        m.sales.set(row.key, { qty: qtyM[i], amt: amtM[i], vc: vcM[i] }),
+      );
+    }
+    // custo fixo
+    for (const row of fixedRaw) {
+      const y = lerp(row.b, row.t);
+      const parts = splitMonthly(y, MONTHS.map(() => between(0.85, 1.15)));
+      months.forEach((m, i) => m.fixed.set(row.category, parts[i]));
+    }
+    // insumos
+    for (const row of inputRaw) {
+      if (row.priceB != null && row.priceT != null) {
+        const pY = lerp(row.priceB, row.priceT);
+        months.forEach((m) =>
+          m.inputsPrice.set(row.item, pY * (isB || isT ? 1 : between(0.98, 1.02))),
+        );
+      } else {
+        const y = lerp(row.levelB ?? 0, row.levelT ?? 0);
+        const parts = splitMonthly(y, MONTHS.map(() => between(0.8, 1.2)));
+        months.forEach((m, i) => m.inputsLevel.set(row.item, parts[i]));
       }
     }
+    // misc
+    for (const row of miscRaw) {
+      const y = lerp(row.b, row.t);
+      const parts = splitMonthly(y, MONTHS.map(() => between(0.8, 1.2)));
+      months.forEach((m, i) => m.misc.set(`${row.driver}|${row.label}`, parts[i]));
+    }
+    // fx, produção, ebitda
+    const fxY = lerp(fxB, fxT);
+    const fcFxY = lerp(fcFxB, fcFxT);
+    const crudeY = crudeSteelKt * (isB || isT ? 1 : between(0.95, 1.05));
+    const crudeParts = splitMonthly(crudeY, MONTHS.map(() => between(0.9, 1.1)));
+    const offsetY = lerp(offsetB, offsetT);
+    const offsetParts = splitMonthly(offsetY, MONTHS.map(() => between(0.9, 1.1)));
+    months.forEach((m, i) => {
+      const fxJitter = isB || isT ? 1 : 1 + between(-0.01, 0.01);
+      m.fx = fxY * fxJitter;
+      m.fcFx = fcFxY * fxJitter;
+      m.crudeKt = crudeParts[i];
+      const revenue = [...m.sales.values()].reduce((s, r) => s + r.amt, 0);
+      const vc = [...m.sales.values()].reduce((s, r) => s + r.vc, 0);
+      const fc = [...m.fixed.values()].reduce((s, r) => s + r, 0);
+      m.ebitda = revenue - vc - fc + offsetParts[i];
+    });
+
+    // calibração: para BUDGET e MRF7 o ano deve bater exatamente com o real.
+    if (isB || isT) {
+      const target = isB ? ebitdaB : ebitdaT;
+      const sum = months.reduce((s, m) => s + m.ebitda, 0);
+      const adj = (target - sum) / 12;
+      months.forEach((m) => (m.ebitda += adj));
+    }
+    monthData.set(version, months);
   }
 
-  // ---------- montagem dos cenários, fatos e detalhes ----------
+  // ---------- materialização dos cenários (ano, trimestres, meses) ----------
   const scenarios: InsertScenario[] = [];
-  const facts: InsertScenarioFact[] = [];
-  const detailFacts: InsertScenarioDetailFact[] = [];
+  const params: InsertScenarioParams[] = [];
+  const sales: InsertSalesFact[] = [];
+  const fixed: InsertFixedCostFact[] = [];
+  const inputs: InsertInputPriceFact[] = [];
+  const misc: InsertMiscFact[] = [];
 
-  // pesos fixos por driver para o drill-down de exemplo (somam 1)
-  const DEMO_PRODUCTS = [
-    "Vergalhão", "Fio-máquina", "Barras", "Perfis", "Arames", "Demais produtos",
-  ];
-  const demoWeights = [0.3, 0.22, 0.18, 0.13, 0.1, 0.07];
+  function aggregate(version: string, idxs: number[]): MonthRaw {
+    const months = monthData.get(version)!;
+    const sel = idxs.map((i) => months[i]);
+    const agg: MonthRaw = {
+      sales: new Map(),
+      fixed: new Map(),
+      inputsPrice: new Map(),
+      inputsLevel: new Map(),
+      misc: new Map(),
+      fx: sel.reduce((s, m) => s + m.fx, 0) / sel.length,
+      fcFx: sel.reduce((s, m) => s + m.fcFx, 0) / sel.length,
+      crudeKt: sel.reduce((s, m) => s + m.crudeKt, 0),
+      ebitda: sel.reduce((s, m) => s + m.ebitda, 0),
+    };
+    for (const m of sel) {
+      for (const [k, v] of m.sales) {
+        const cur = agg.sales.get(k) ?? { qty: 0, amt: 0, vc: 0 };
+        agg.sales.set(k, { qty: cur.qty + v.qty, amt: cur.amt + v.amt, vc: cur.vc + v.vc });
+      }
+      for (const [k, v] of m.fixed) agg.fixed.set(k, (agg.fixed.get(k) ?? 0) + v);
+      for (const [k, v] of m.inputsLevel) agg.inputsLevel.set(k, (agg.inputsLevel.get(k) ?? 0) + v);
+      for (const [k, v] of m.misc) agg.misc.set(k, (agg.misc.get(k) ?? 0) + v);
+      for (const [k, v] of m.inputsPrice) {
+        // preço médio ponderado pela produção
+        agg.inputsPrice.set(k, (agg.inputsPrice.get(k) ?? 0) + v * m.crudeKt);
+      }
+    }
+    for (const [k, v] of agg.inputsPrice) agg.inputsPrice.set(k, v / agg.crudeKt);
+    return agg;
+  }
 
   function addScenario(opts: {
     id: string;
@@ -219,128 +372,139 @@ async function main() {
     periodKind: string;
     label: string;
     sortOrder: number;
-    levels: Record<string, number>; // driver -> nível
-    ebitdaBase: number; // base do período (BASE_M * nº de meses)
-    realDetail?: boolean; // usa linhas reais do Excel (FY26 MRF7 ano)
+    data: MonthRaw;
   }) {
+    const { id, data } = opts;
     scenarios.push({
-      id: opts.id,
+      id,
       version: opts.version,
       period: opts.period,
       periodKind: opts.periodKind,
       label: opts.label,
       sortOrder: opts.sortOrder,
     });
-    const levelSum = Object.values(opts.levels).reduce((s, v) => s + v, 0);
-    facts.push({
-      scenarioId: opts.id,
-      metric: "ebitda",
-      valueMusd: opts.ebitdaBase + levelSum,
+    params.push({
+      scenarioId: id,
+      fxRate: data.fx,
+      fcFxRate: data.fcFx,
+      crudeSteelKt: data.crudeKt,
+      ebitdaKusd: data.ebitda,
+      dmCostShare: 0.4,
     });
-    for (const d of BRIDGE_DRIVERS) {
-      const level = opts.levels[d.key] ?? 0;
-      if (Math.abs(level) < 1e-9) continue;
-      facts.push({ scenarioId: opts.id, metric: d.key, valueMusd: level });
-      if (opts.realDetail) continue; // detalhes reais adicionados à parte
-      DEMO_PRODUCTS.forEach((label, i) => {
-        detailFacts.push({
-          scenarioId: opts.id,
-          componentKey: d.key,
-          label,
-          group: "Por produto",
-          valueMusd: level * demoWeights[i],
-          sortOrder: i,
-        });
+    for (const row of salesRaw) {
+      const v = data.sales.get(row.key);
+      if (!v) continue;
+      sales.push({
+        scenarioId: id,
+        productKey: row.key,
+        label: row.label,
+        currency: row.currency,
+        domestic: row.domestic,
+        qtyKt: v.qty,
+        amountKusd: v.amt,
+        varCostKusd: v.vc,
+        sortOrder: row.sortOrder,
       });
     }
-    if (opts.realDetail) {
-      for (const l of realDetailLines) {
-        detailFacts.push({ ...l, scenarioId: opts.id });
+    for (const row of fixedRaw) {
+      fixed.push({
+        scenarioId: id,
+        category: row.category,
+        amountKusd: data.fixed.get(row.category) ?? 0,
+        usdDenominated: row.usd,
+        sortOrder: row.sortOrder,
+      });
+    }
+    for (const row of inputRaw) {
+      if (row.priceB != null) {
+        inputs.push({
+          scenarioId: id,
+          item: row.item,
+          unitPriceUsd: data.inputsPrice.get(row.item) ?? row.priceB,
+          yieldFactor: row.yieldF ?? 0,
+          amountKusd: null,
+          sortOrder: row.sortOrder,
+        });
+      } else {
+        inputs.push({
+          scenarioId: id,
+          item: row.item,
+          unitPriceUsd: null,
+          yieldFactor: null,
+          amountKusd: data.inputsLevel.get(row.item) ?? 0,
+          sortOrder: row.sortOrder,
+        });
       }
+    }
+    for (const row of miscRaw) {
+      misc.push({
+        scenarioId: id,
+        driver: row.driver,
+        label: row.label,
+        amountKusd: data.misc.get(`${row.driver}|${row.label}`) ?? 0,
+        sortOrder: row.sortOrder,
+      });
     }
   }
 
   let sort = 0;
-  for (const year of YEARS) {
-    const fy = `FY${year % 100}`;
-    for (const [vi, version] of VERSIONS.entries()) {
-      const months = BRIDGE_DRIVERS.reduce<Record<string, number[]>>((acc, d) => {
-        acc[d.key] = monthlyLevels.get(levelKey(year, version, d.key))!;
-        return acc;
-      }, {});
-      const sumRange = (d: string, from: number, to: number) =>
-        months[d].slice(from, to).reduce((s, v) => s + v, 0);
-      const idBase = `fy${year % 100}`;
-      const vSlug = version.toLowerCase();
-
-      // Ano
+  for (const version of VERSIONS) {
+    const vSlug = version.toLowerCase();
+    const vLabel = version === "BUDGET" ? "Budget" : version;
+    const all12 = MONTHS.map((_, i) => i);
+    addScenario({
+      id: `fy${YEAR}_fy_${vSlug}`,
+      version,
+      period: `FY${YEAR}`,
+      periodKind: "year",
+      label: `FY${YEAR} ${vLabel}`,
+      sortOrder: sort++,
+      data: aggregate(version, all12),
+    });
+    for (let q = 0; q < 4; q++) {
       addScenario({
-        id: `${idBase}_fy_${vSlug}`,
+        id: `fy${YEAR}_q${q + 1}_${vSlug}`,
         version,
-        period: fy,
-        periodKind: "year",
-        label: `${fy} ${version === "BUDGET" ? "Budget" : version}`,
-        sortOrder: sort++,
-        levels: Object.fromEntries(
-          BRIDGE_DRIVERS.map((d) => [d.key, sumRange(d.key, 0, 12)]),
-        ),
-        ebitdaBase: BASE_M * 12,
-        realDetail: year === 2026 && version === "MRF7",
+        period: `Q${q + 1}${YEAR}`,
+        periodKind: "quarter",
+        label: `Q${q + 1}${YEAR} ${vLabel}`,
+        sortOrder: 1000 + sort * 10 + q,
+        data: aggregate(version, [q * 3, q * 3 + 1, q * 3 + 2]),
       });
-      // Trimestres
-      for (let q = 0; q < 4; q++) {
-        addScenario({
-          id: `${idBase}_q${q + 1}_${vSlug}`,
-          version,
-          period: `Q${q + 1}${year % 100}`,
-          periodKind: "quarter",
-          label: `Q${q + 1}${year % 100} ${version === "BUDGET" ? "Budget" : version}`,
-          sortOrder: 1000 + sort * 10 + q,
-          levels: Object.fromEntries(
-            BRIDGE_DRIVERS.map((d) => [d.key, sumRange(d.key, q * 3, q * 3 + 3)]),
-          ),
-          ebitdaBase: BASE_M * 3,
-        });
-      }
-      // Meses
-      for (let m = 0; m < 12; m++) {
-        addScenario({
-          id: `${idBase}_m${String(m + 1).padStart(2, "0")}_${vSlug}`,
-          version,
-          period: `${MONTHS[m]}${year % 100}`,
-          periodKind: "month",
-          label: `${MONTHS[m]}${year % 100} ${version === "BUDGET" ? "Budget" : version}`,
-          sortOrder: 10000 + sort * 100 + m,
-          levels: Object.fromEntries(
-            BRIDGE_DRIVERS.map((d) => [d.key, months[d.key][m]]),
-          ),
-          ebitdaBase: BASE_M,
-        });
-      }
-      void vi;
+    }
+    for (let m = 0; m < 12; m++) {
+      addScenario({
+        id: `fy${YEAR}_m${String(m + 1).padStart(2, "0")}_${vSlug}`,
+        version,
+        period: `${MONTHS[m]}${YEAR}`,
+        periodKind: "month",
+        label: `${MONTHS[m]}${YEAR} ${vLabel}`,
+        sortOrder: 10000 + sort * 100 + m,
+        data: aggregate(version, [m]),
+      });
     }
   }
 
   await db.transaction(async (tx) => {
-    await tx.delete(scenarioDetailFactsTable);
-    await tx.delete(scenarioFactsTable);
+    await tx.delete(miscFactsTable);
+    await tx.delete(inputPriceFactsTable);
+    await tx.delete(fixedCostFactsTable);
+    await tx.delete(salesFactsTable);
+    await tx.delete(scenarioParamsTable);
     await tx.delete(scenariosTable);
-    // inserts em lote para não estourar limites de parâmetros
     const chunk = <T,>(arr: T[], n: number) =>
-      Array.from({ length: Math.ceil(arr.length / n) }, (_, i) =>
-        arr.slice(i * n, i * n + n),
-      );
+      Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
     for (const c of chunk(scenarios, 500)) await tx.insert(scenariosTable).values(c);
-    for (const c of chunk(facts, 1000)) await tx.insert(scenarioFactsTable).values(c);
-    for (const c of chunk(detailFacts, 1000))
-      await tx.insert(scenarioDetailFactsTable).values(c);
+    for (const c of chunk(params, 500)) await tx.insert(scenarioParamsTable).values(c);
+    for (const c of chunk(sales, 1000)) await tx.insert(salesFactsTable).values(c);
+    for (const c of chunk(fixed, 1000)) await tx.insert(fixedCostFactsTable).values(c);
+    for (const c of chunk(inputs, 1000)) await tx.insert(inputPriceFactsTable).values(c);
+    for (const c of chunk(misc, 1000)) await tx.insert(miscFactsTable).values(c);
   });
 
   console.log(
-    `Importado: ${scenarios.length} cenários, ${facts.length} fatos, ${detailFacts.length} linhas de detalhe.`,
-  );
-  console.log(
-    `Referência real FY26 Budget→MRF7: ${start.toFixed(1)} -> ${end.toFixed(1)} MUSD (variação ${(end - start).toFixed(1)})`,
+    `Importado: ${scenarios.length} cenários | ${sales.length} linhas de vendas | ` +
+      `${fixed.length} custo fixo | ${inputs.length} insumos | ${misc.length} misc`,
   );
   await pool.end();
 }
