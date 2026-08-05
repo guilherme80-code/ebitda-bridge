@@ -7,3 +7,10 @@ uri = "file://attached_assets/modelo_tabelas_bridge_ebitda.xlsx"
 type = "table"
 title = "Modelo de tabelas — Bridge de EBITDA"
 description = "Modelo com dimensões (período, versão, unidade, driver), fatos (EBITDA, drivers, detalhes), ajustes gerenciais e regras de preenchimento, com linhas de exemplo."
+
+[[outputs]]
+id = "OgrapvVXWo90GTuykOewp"
+uri = "file://attached_assets/fato_bridge_ebitda.xlsx"
+type = "table"
+title = "Tabela Fato — Bridge de EBITDA"
+description = "Tabela fato única (formato longo) com todas as colunas necessárias: cenários origem/destino, driver, detalhe, ajuste, valor, fonte e governança — com linhas de exemplo."
