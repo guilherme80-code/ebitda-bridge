@@ -1,0 +1,9 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "BjopOFvCuqGKXIzomkkiq"
+uri = "file://exports/Template_Fonte_Dados_Bridge_EBITDA.xlsx"
+type = "table"
+title = "Template da fonte de dados — Bridge de EBITDA"
+description = "Modelo Excel com a estrutura de dados do painel (Cenarios, Fatos, Detalhes, Metricas) e exemplos reais FY26 Budget → MRF7, para reproduzir no Databricks."
