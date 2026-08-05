@@ -1,0 +1,9 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "jIIWDgccjBd-mq0nfc5fU"
+uri = "file://attached_assets/modelo_tabelas_bridge_ebitda.xlsx"
+type = "table"
+title = "Modelo de tabelas — Bridge de EBITDA"
+description = "Modelo com dimensões (período, versão, unidade, driver), fatos (EBITDA, drivers, detalhes), ajustes gerenciais e regras de preenchimento, com linhas de exemplo."
