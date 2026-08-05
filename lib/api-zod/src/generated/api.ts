@@ -89,6 +89,34 @@ export const GetBridgeComponentResponse = zod.object({
 
 
 /**
+ * Returns the detailed tables per driver (sales by product, fixed cost by category, input prices by item, usage, forex composition, stock/others), mirroring the Excel workbook driver tabs.
+ * @summary Get detailed tables per bridge driver
+ */
+export const GetBridgeTablesQueryParams = zod.object({
+  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the first version with imported data.'),
+  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the most recent version with imported data.')
+})
+
+export const GetBridgeTablesResponse = zod.object({
+  "title": zod.string(),
+  "unit": zod.string(),
+  "tables": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "columns": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string()
+}).describe('One numeric column of a detailed table; the label includes the unit.')),
+  "rows": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['row', 'subtotal', 'total']),
+  "values": zod.array(zod.number().nullable())
+}).describe('One row of a detailed table. Values align with the columns array; null means not applicable.'))
+}).describe('A detailed table for one bridge driver (mirrors an Excel driver tab).'))
+})
+
+
+/**
  * Returns headline figures — start, end, total variation, largest positive and negative impacts.
  * @summary Get executive summary of the bridge
  */

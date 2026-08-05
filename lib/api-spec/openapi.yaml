@@ -94,6 +94,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /bridge/tables:
+    get:
+      operationId: getBridgeTables
+      tags: [bridge]
+      summary: Get detailed tables per bridge driver
+      description: Returns the detailed tables per driver (sales by product, fixed cost by category, input prices by item, usage, forex composition, stock/others), mirroring the Excel workbook driver tabs.
+      parameters:
+        - $ref: "#/components/parameters/SourceScenario"
+        - $ref: "#/components/parameters/TargetScenario"
+      responses:
+        "200":
+          description: Detailed tables
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeTables"
+        "400":
+          description: Source and target periods have different granularity (year vs quarter vs month)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: No bridge for the selected scenario pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /bridge/summary:
     get:
       operationId: getBridgeSummary
@@ -299,6 +327,58 @@ components:
         - largestNegative
         - positiveTotal
         - negativeTotal
+    BridgeTableColumn:
+      type: object
+      description: One numeric column of a detailed table; the label includes the unit.
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+      required: [key, label]
+    BridgeTableRow:
+      type: object
+      description: One row of a detailed table. Values align with the columns array; null means not applicable.
+      properties:
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [row, subtotal, total]
+        values:
+          type: array
+          items:
+            type: ["number", "null"]
+      required: [label, kind, values]
+    BridgeTable:
+      type: object
+      description: A detailed table for one bridge driver (mirrors an Excel driver tab).
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/BridgeTableColumn"
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/BridgeTableRow"
+      required: [key, title, columns, rows]
+    BridgeTables:
+      type: object
+      properties:
+        title:
+          type: string
+        unit:
+          type: string
+        tables:
+          type: array
+          items:
+            $ref: "#/components/schemas/BridgeTable"
+      required: [title, unit, tables]
     BridgeImpactHighlight:
       type: object
       properties:

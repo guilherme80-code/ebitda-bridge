@@ -135,6 +135,48 @@ export interface BridgeSummary {
 }
 
 /**
+ * One numeric column of a detailed table; the label includes the unit.
+ */
+export interface BridgeTableColumn {
+  key: string;
+  label: string;
+}
+
+export type BridgeTableRowKind = typeof BridgeTableRowKind[keyof typeof BridgeTableRowKind];
+
+
+export const BridgeTableRowKind = {
+  row: 'row',
+  subtotal: 'subtotal',
+  total: 'total',
+} as const;
+
+/**
+ * One row of a detailed table. Values align with the columns array; null means not applicable.
+ */
+export interface BridgeTableRow {
+  label: string;
+  kind: BridgeTableRowKind;
+  values: (number | null)[];
+}
+
+/**
+ * A detailed table for one bridge driver (mirrors an Excel driver tab).
+ */
+export interface BridgeTable {
+  key: string;
+  title: string;
+  columns: BridgeTableColumn[];
+  rows: BridgeTableRow[];
+}
+
+export interface BridgeTables {
+  title: string;
+  unit: string;
+  tables: BridgeTable[];
+}
+
+/**
  * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */
 export type SourceScenarioParameter = string;
@@ -156,6 +198,17 @@ target?: TargetScenarioParameter;
 };
 
 export type GetBridgeComponentParams = {
+/**
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
+ */
+source?: SourceScenarioParameter;
+/**
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
+ */
+target?: TargetScenarioParameter;
+};
+
+export type GetBridgeTablesParams = {
 /**
  * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */

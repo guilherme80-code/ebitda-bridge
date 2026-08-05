@@ -46,11 +46,30 @@ export interface DetailLine {
   sortOrder: number;
 }
 
+export interface BridgeTableColumn {
+  key: string;
+  label: string; // inclui a unidade, ex.: "Qtd origem (kt)"
+}
+
+export interface BridgeTableRow {
+  label: string;
+  kind: "row" | "subtotal" | "total";
+  values: (number | null)[]; // alinhado às colunas
+}
+
+export interface BridgeTable {
+  key: string;
+  title: string;
+  columns: BridgeTableColumn[];
+  rows: BridgeTableRow[];
+}
+
 export interface BridgeResult {
   start: number; // MUSD
   end: number; // MUSD
   drivers: Record<string, number>; // MUSD por alavanca
   details: Record<string, DetailLine[]>;
+  tables: BridgeTable[]; // tabelas detalhadas (abas Receita, Fixed Cost, ...)
 }
 
 const K = 1000; // kUSD -> MUSD
@@ -92,6 +111,19 @@ export function computeBridge(
   let volMixTotal = 0;
   const priceLines: DetailLine[] = [];
   const volMixLines: DetailLine[] = [];
+  // linhas da tabela de vendas (aba Receita)
+  const salesRows: {
+    label: string;
+    domestic: boolean;
+    sortOrder: number;
+    qtyB: number;
+    qtyT: number;
+    pB: number;
+    pT: number;
+    volMix: number;
+    price: number;
+    fx: number;
+  }[] = [];
 
   for (const { b, t, label, sortOrder } of byKey.values()) {
     const qtyB = b?.qtyKt ?? 0;
@@ -135,6 +167,19 @@ export function computeBridge(
         sortOrder: 100 + sortOrder,
       });
     }
+
+    salesRows.push({
+      label,
+      domestic: (t ?? b)?.domestic ?? false,
+      sortOrder,
+      qtyB,
+      qtyT,
+      pB,
+      pT,
+      volMix,
+      price,
+      fx: priceUsd - price, // col. Q = P − M (0 para produtos USD)
+    });
   }
   const volMixDetail: DetailLine[] = [
     { label: "Volume", group: "Resumo", value: volume / K, sortOrder: 0 },
@@ -170,6 +215,14 @@ export function computeBridge(
   }
   let fixedCost = 0;
   const fixedDetail: DetailLine[] = [];
+  const fixedRows: {
+    label: string;
+    sortOrder: number;
+    amtB: number;
+    amtT: number;
+    fcForex: number;
+    eff: number;
+  }[] = [];
   for (const [category, { b, t, sortOrder }] of fixedByCat) {
     const amtB = b?.amountKusd ?? 0;
     const amtT = t?.amountKusd ?? 0;
@@ -177,6 +230,7 @@ export function computeBridge(
     const fcForex = usd || fcFxB === 0 ? 0 : amtT * (fcFxT / fcFxB - 1); // col. I
     const eff = amtB - amtT - fcForex; // col. J
     fixedCost += eff;
+    fixedRows.push({ label: category, sortOrder, amtB, amtT, fcForex, eff });
     if (Math.abs(eff) > 1e-9) {
       fixedDetail.push({ label: category, group: null, value: eff / K, sortOrder });
     }
@@ -195,25 +249,51 @@ export function computeBridge(
   }
   let inputPrice = 0;
   const inputDetail: DetailLine[] = [];
+  const inputRows: {
+    label: string;
+    sortOrder: number;
+    pB: number | null;
+    pT: number | null;
+    amtB: number | null;
+    amtT: number | null;
+    eff: number;
+  }[] = [];
   const prodT = target.params.crudeSteelKt / 1000; // G144
   for (const [item, { b, t, sortOrder }] of inputByItem) {
     let eff = 0;
+    let row: (typeof inputRows)[number];
     if (b?.unitPriceUsd != null || t?.unitPriceUsd != null) {
       const pB = b?.unitPriceUsd ?? 0;
       const pT = t?.unitPriceUsd ?? 0;
       const yieldF = t?.yieldFactor ?? b?.yieldFactor ?? 0;
       eff = (pB - pT) * yieldF * prodT; // col. J (128-134)
+      row = { label: item, sortOrder, pB, pT, amtB: null, amtT: null, eff };
     } else {
-      eff = (t?.amountKusd ?? 0) - (b?.amountKusd ?? 0); // itens diretos
+      const amtB = b?.amountKusd ?? 0;
+      const amtT = t?.amountKusd ?? 0;
+      eff = amtT - amtB; // itens diretos
+      row = { label: item, sortOrder, pB: null, pT: null, amtB, amtT, eff };
     }
     inputPrice += eff;
+    inputRows.push(row);
     if (Math.abs(eff) > 1e-9) {
       inputDetail.push({ label: item, group: null, value: eff / K, sortOrder });
     }
   }
 
   // ---------- consumo / others / estoque (147, 155-181) ----------
-  function diffMisc(driver: string): { total: number; lines: DetailLine[] } {
+  interface MiscRow {
+    label: string;
+    sortOrder: number;
+    amtB: number;
+    amtT: number;
+    eff: number;
+  }
+  function diffMisc(driver: string): {
+    total: number;
+    lines: DetailLine[];
+    rows: MiscRow[];
+  } {
     const byLabel = new Map<
       string,
       { b?: MiscFact; t?: MiscFact; sortOrder: number }
@@ -228,15 +308,20 @@ export function computeBridge(
     }
     let total = 0;
     const lines: DetailLine[] = [];
+    const rows: MiscRow[] = [];
     for (const [label, { b, t, sortOrder }] of byLabel) {
-      const eff = (t?.amountKusd ?? 0) - (b?.amountKusd ?? 0);
+      const amtB = b?.amountKusd ?? 0;
+      const amtT = t?.amountKusd ?? 0;
+      const eff = amtT - amtB;
       total += eff;
+      rows.push({ label, sortOrder, amtB, amtT, eff });
       if (Math.abs(eff) > 1e-9) {
         lines.push({ label, group: null, value: eff / K, sortOrder });
       }
     }
     lines.sort((a, b) => a.sortOrder - b.sortOrder);
-    return { total, lines };
+    rows.sort((a, b) => a.sortOrder - b.sortOrder);
+    return { total, lines, rows };
   }
   const usage = diffMisc("usage");
   const others = diffMisc("others");
@@ -273,6 +358,201 @@ export function computeBridge(
   priceLines.sort((a, b) => b.value - a.value);
   volMixLines.sort((a, b) => b.value - a.value);
 
+  // ---------- tabelas detalhadas (abas Receita, Fixed Cost, ...) ----------
+  const tables: BridgeTable[] = [];
+
+  // Vendas (aba Receita): por produto, com subtotais Externo/Doméstico.
+  salesRows.sort((a, b) => a.sortOrder - b.sortOrder);
+  const salesValues = (r: (typeof salesRows)[number]): (number | null)[] => [
+    r.qtyB / 1000,
+    r.qtyT / 1000,
+    (r.qtyT - r.qtyB) / 1000,
+    r.pB,
+    r.pT,
+    r.volMix / K,
+    r.price / K,
+    r.fx / K,
+  ];
+  const sumSales = (rows: typeof salesRows, label: string, kind: "subtotal" | "total"): BridgeTableRow => ({
+    label,
+    kind,
+    values: [
+      rows.reduce((s, r) => s + r.qtyB, 0) / 1000,
+      rows.reduce((s, r) => s + r.qtyT, 0) / 1000,
+      rows.reduce((s, r) => s + r.qtyT - r.qtyB, 0) / 1000,
+      null,
+      null,
+      rows.reduce((s, r) => s + r.volMix, 0) / K,
+      rows.reduce((s, r) => s + r.price, 0) / K,
+      rows.reduce((s, r) => s + r.fx, 0) / K,
+    ],
+  });
+  const external = salesRows.filter((r) => !r.domestic);
+  const domesticRows = salesRows.filter((r) => r.domestic);
+  tables.push({
+    key: "sales",
+    title: "Vendas — volume, preço e efeitos por produto",
+    columns: [
+      { key: "qty_b", label: "Qtd origem (kt)" },
+      { key: "qty_t", label: "Qtd destino (kt)" },
+      { key: "qty_var", label: "Δ Qtd (kt)" },
+      { key: "price_b", label: "Preço origem (USD/t)" },
+      { key: "price_t", label: "Preço destino (USD/t)" },
+      { key: "vol_mix", label: "Vol & Mix (MUSD)" },
+      { key: "price", label: "Preço (MUSD)" },
+      { key: "forex", label: "Câmbio (MUSD)" },
+    ],
+    rows: [
+      ...external.map((r) => ({ label: r.label, kind: "row" as const, values: salesValues(r) })),
+      sumSales(external, "Subtotal Externo", "subtotal"),
+      ...domesticRows.map((r) => ({ label: r.label, kind: "row" as const, values: salesValues(r) })),
+      sumSales(domesticRows, "Subtotal Mercado Interno", "subtotal"),
+      sumSales(salesRows, "Total", "total"),
+    ],
+  });
+
+  // Custo fixo (aba Fixed Cost)
+  fixedRows.sort((a, b) => a.sortOrder - b.sortOrder);
+  tables.push({
+    key: "fixed_cost",
+    title: "Custo fixo — por categoria",
+    columns: [
+      { key: "amt_b", label: "Montante origem (MUSD)" },
+      { key: "amt_t", label: "Montante destino (MUSD)" },
+      { key: "fc_forex", label: "Efeito câmbio (MUSD)" },
+      { key: "effect", label: "Efeito custo fixo (MUSD)" },
+    ],
+    rows: [
+      ...fixedRows.map((r) => ({
+        label: r.label,
+        kind: "row" as const,
+        values: [r.amtB / K, r.amtT / K, r.fcForex / K, r.eff / K],
+      })),
+      {
+        label: "Total",
+        kind: "total" as const,
+        values: [
+          fixedRows.reduce((s, r) => s + r.amtB, 0) / K,
+          fixedRows.reduce((s, r) => s + r.amtT, 0) / K,
+          fixedRows.reduce((s, r) => s + r.fcForex, 0) / K,
+          fixedCost / K,
+        ],
+      },
+    ],
+  });
+
+  // Preço de insumos (aba Input price)
+  inputRows.sort((a, b) => a.sortOrder - b.sortOrder);
+  tables.push({
+    key: "input_price",
+    title: "Preço de insumos — por item",
+    columns: [
+      { key: "price_b", label: "Preço origem (USD)" },
+      { key: "price_t", label: "Preço destino (USD)" },
+      { key: "amt_b", label: "Montante origem (MUSD)" },
+      { key: "amt_t", label: "Montante destino (MUSD)" },
+      { key: "effect", label: "Efeito (MUSD)" },
+    ],
+    rows: [
+      ...inputRows.map((r) => ({
+        label: r.label,
+        kind: "row" as const,
+        values: [
+          r.pB,
+          r.pT,
+          r.amtB == null ? null : r.amtB / K,
+          r.amtT == null ? null : r.amtT / K,
+          r.eff / K,
+        ],
+      })),
+      {
+        label: "Total",
+        kind: "total" as const,
+        values: [null, null, null, null, inputPrice / K],
+      },
+    ],
+  });
+
+  // Consumo (aba Usage)
+  tables.push({
+    key: "usage",
+    title: "Consumo (Usage) — por linha",
+    columns: [
+      { key: "amt_b", label: "Montante origem (MUSD)" },
+      { key: "amt_t", label: "Montante destino (MUSD)" },
+      { key: "effect", label: "Efeito (MUSD)" },
+    ],
+    rows: [
+      ...usage.rows.map((r) => ({
+        label: r.label,
+        kind: "row" as const,
+        values: [r.amtB / K, r.amtT / K, r.eff / K],
+      })),
+      {
+        label: "Total",
+        kind: "total" as const,
+        values: [
+          usage.rows.reduce((s, r) => s + r.amtB, 0) / K,
+          usage.rows.reduce((s, r) => s + r.amtT, 0) / K,
+          usage.total / K,
+        ],
+      },
+    ],
+  });
+
+  // Câmbio (aba Forex)
+  tables.push({
+    key: "forex",
+    title: "Câmbio — composição do efeito",
+    columns: [
+      { key: "base", label: "Base destino (MUSD)" },
+      { key: "effect", label: "Efeito (MUSD)" },
+    ],
+    rows: [
+      { label: "Receita mercado doméstico", kind: "row", values: [domRevT / K, fxRevenue / K] },
+      {
+        label: "Custos (parcela doméstica)",
+        kind: "row",
+        values: [(ebitdaCostT * target.params.dmCostShare) / K, fxCost / K],
+      },
+      { label: "Total", kind: "total", values: [null, forex / K] },
+    ],
+  });
+
+  // Estoque / Outros (aba SV-Others)
+  const svRows: BridgeTableRow[] = [
+    ...others.rows.map((r) => ({
+      label: `${r.label} (Outros)`,
+      kind: "row" as const,
+      values: [r.amtB / K, r.amtT / K, r.eff / K],
+    })),
+    ...stock.rows.map((r) => ({
+      label: r.label,
+      kind: "row" as const,
+      values: [r.amtB / K, r.amtT / K, r.eff / K],
+    })),
+    {
+      label: "Variação de estoque — ajuste de fechamento",
+      kind: "row" as const,
+      values: [null, null, (stockPlug - stock.total) / K],
+    },
+    {
+      label: "Total",
+      kind: "total" as const,
+      values: [null, null, svOthers / K],
+    },
+  ];
+  tables.push({
+    key: "sv_others",
+    title: "Estoque / Outros — por linha",
+    columns: [
+      { key: "amt_b", label: "Montante origem (MUSD)" },
+      { key: "amt_t", label: "Montante destino (MUSD)" },
+      { key: "effect", label: "Efeito (MUSD)" },
+    ],
+    rows: svRows,
+  });
+
   return {
     start: start / K,
     end: end / K,
@@ -294,5 +574,6 @@ export function computeBridge(
       forex: forexDetail,
       sv_others: svDetail,
     },
+    tables,
   };
 }

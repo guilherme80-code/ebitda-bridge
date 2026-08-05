@@ -16,6 +16,7 @@ import {
   GetBridgeComponentParams,
   GetBridgeComponentResponse,
   GetBridgeSummaryResponse,
+  GetBridgeTablesResponse,
   ListScenariosResponse,
 } from "@workspace/api-zod";
 import { computeBridge, type RawScenarioData } from "../lib/bridge-calc";
@@ -267,6 +268,29 @@ router.get("/bridge/components/:key", async (req, res): Promise<void> => {
       value: pair.bridge.drivers[driver.key] ?? 0,
       unit: UNIT,
       lines,
+    }),
+  );
+});
+
+router.get("/bridge/tables", async (req, res): Promise<void> => {
+  const pair = await resolvePair(
+    firstStr(req.query.source),
+    firstStr(req.query.target),
+  );
+  if (!pair) {
+    res.status(404).json({ error: NO_DATA_ERROR });
+    return;
+  }
+  if ("kindMismatch" in pair) {
+    res.status(400).json({ error: KIND_MISMATCH_ERROR });
+    return;
+  }
+
+  res.json(
+    GetBridgeTablesResponse.parse({
+      title: bridgeTitle(pair.source, pair.target),
+      unit: UNIT,
+      tables: pair.bridge.tables,
     }),
   );
 });

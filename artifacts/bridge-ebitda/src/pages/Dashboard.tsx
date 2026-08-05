@@ -8,6 +8,7 @@ import {
 import { WaterfallChart } from '../components/WaterfallChart';
 import { SummaryCards } from '../components/SummaryCards';
 import { DrillDownDrawer } from '../components/DrillDownDrawer';
+import { DetailedTables } from '../components/DetailedTables';
 import { ScenarioSelector } from '../components/ScenarioSelector';
 import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -106,6 +107,10 @@ export default function Dashboard() {
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             <SummaryCards summary={summary} />
           </div>
+        )}
+
+        {!isLoading && !isError && bridge && (
+          <DetailedTables params={params} enabled={pairAvailable} />
         )}
 
         {!isLoading && !isError && bridge && (

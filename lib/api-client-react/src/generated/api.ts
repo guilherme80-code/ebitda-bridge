@@ -19,10 +19,12 @@ import type {
   Bridge,
   BridgeComponentDetail,
   BridgeSummary,
+  BridgeTables,
   ErrorMessage,
   GetBridgeComponentParams,
   GetBridgeParams,
   GetBridgeSummaryParams,
+  GetBridgeTablesParams,
   HealthStatus,
   ScenarioCatalog
 } from './api.schemas';
@@ -373,6 +375,91 @@ export function useGetBridgeComponent<TData = Awaited<ReturnType<typeof getBridg
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetBridgeComponentQueryOptions(key,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBridgeTablesUrl = (params?: GetBridgeTablesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bridge/tables?${stringifiedParams}` : `/api/bridge/tables`
+}
+
+/**
+ * Returns the detailed tables per driver (sales by product, fixed cost by category, input prices by item, usage, forex composition, stock/others), mirroring the Excel workbook driver tabs.
+ * @summary Get detailed tables per bridge driver
+ */
+export const getBridgeTables = async (params?: GetBridgeTablesParams, options?: Parameters<typeof customFetch>[1]): Promise<BridgeTables> => {
+
+  return customFetch<BridgeTables>(getGetBridgeTablesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBridgeTablesQueryKey = (params?: GetBridgeTablesParams,) => {
+    return [
+    `/api/bridge/tables`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBridgeTablesQueryOptions = <TData = Awaited<ReturnType<typeof getBridgeTables>>, TError = ErrorType<ErrorMessage>>(params?: GetBridgeTablesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBridgeTables>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBridgeTablesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBridgeTables>>> = ({ signal }) => getBridgeTables(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBridgeTables>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBridgeTablesQueryResult = NonNullable<Awaited<ReturnType<typeof getBridgeTables>>>
+export type GetBridgeTablesQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary Get detailed tables per bridge driver
+ */
+
+export function useGetBridgeTables<TData = Awaited<ReturnType<typeof getBridgeTables>>, TError = ErrorType<ErrorMessage>>(
+ params?: GetBridgeTablesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBridgeTables>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBridgeTablesQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
