@@ -152,6 +152,21 @@ function bridgeTitle(source: Scenario, target: Scenario) {
   return `Bridge de EBITDA — ${source.label} vs ${target.label}`;
 }
 
+/** Substitui os genéricos "origem"/"destino" dos rótulos de colunas pelos
+ * nomes dos cenários selecionados (ex.: "Qtd FY26 Budget (kt)"). */
+function scenarioColumns<T extends { key: string; label: string }>(
+  columns: T[],
+  source: Scenario,
+  target: Scenario,
+): T[] {
+  return columns.map((c) => ({
+    ...c,
+    label: c.label
+      .replace(/\borigem\b/g, source.label)
+      .replace(/\bdestino\b/g, target.label),
+  }));
+}
+
 router.get("/scenarios", async (_req, res): Promise<void> => {
   const { scenarios, withData } = await loadCatalog();
   const def = defaultPair(scenarios, withData);
@@ -430,7 +445,7 @@ Regras:
     return {
       key: table.key,
       title: table.title,
-      columns: table.columns,
+      columns: scenarioColumns(table.columns, pair.source, pair.target),
       rows: table.rows.map((row, i) => {
         const baseRow =
           baseTable?.rows.find(
@@ -484,7 +499,10 @@ router.get("/bridge/tables", async (req, res): Promise<void> => {
     GetBridgeTablesResponse.parse({
       title: bridgeTitle(pair.source, pair.target),
       unit: UNIT,
-      tables: pair.bridge.tables,
+      tables: pair.bridge.tables.map((t) => ({
+        ...t,
+        columns: scenarioColumns(t.columns, pair.source, pair.target),
+      })),
     }),
   );
 });
