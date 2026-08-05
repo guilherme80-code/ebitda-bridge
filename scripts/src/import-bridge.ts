@@ -63,8 +63,8 @@ function mulberry32(seed: number) {
 const rnd = mulberry32(20260805);
 const between = (lo: number, hi: number) => lo + (hi - lo) * rnd();
 
-const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-const YEARS = [2025, 2026, 2027];
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const YEARS = [2026];
 const VERSIONS = ["BUDGET", "MRF1", "MRF2", "MRF3", "MRF4", "MRF5", "MRF6", "MRF7"];
 
 async function main() {
@@ -292,9 +292,9 @@ async function main() {
         addScenario({
           id: `${idBase}_q${q + 1}_${vSlug}`,
           version,
-          period: `${fy} Q${q + 1}`,
+          period: `Q${q + 1}${year % 100}`,
           periodKind: "quarter",
-          label: `${fy} Q${q + 1} ${version === "BUDGET" ? "Budget" : version}`,
+          label: `Q${q + 1}${year % 100} ${version === "BUDGET" ? "Budget" : version}`,
           sortOrder: 1000 + sort * 10 + q,
           levels: Object.fromEntries(
             BRIDGE_DRIVERS.map((d) => [d.key, sumRange(d.key, q * 3, q * 3 + 3)]),
@@ -307,9 +307,9 @@ async function main() {
         addScenario({
           id: `${idBase}_m${String(m + 1).padStart(2, "0")}_${vSlug}`,
           version,
-          period: `${fy} ${MONTHS[m]}`,
+          period: `${MONTHS[m]}${year % 100}`,
           periodKind: "month",
-          label: `${fy} ${MONTHS[m]} ${version === "BUDGET" ? "Budget" : version}`,
+          label: `${MONTHS[m]}${year % 100} ${version === "BUDGET" ? "Budget" : version}`,
           sortOrder: 10000 + sort * 100 + m,
           levels: Object.fromEntries(
             BRIDGE_DRIVERS.map((d) => [d.key, months[d.key][m]]),
