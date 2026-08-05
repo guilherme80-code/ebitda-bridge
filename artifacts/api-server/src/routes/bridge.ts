@@ -25,6 +25,7 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import {
   simulateBridge,
   buildCatalog,
+  buildSimulatedTables,
   type Adjustment,
 } from "../lib/simulate";
 import { computeBridge, type RawScenarioData } from "../lib/bridge-calc";
@@ -439,34 +440,12 @@ Regras:
 
   // Tabelas detalhadas recalculadas com os dados simulados, pareadas com os
   // valores originais (mesmos itens; os ajustes só alteram linhas existentes).
-  const CHANGE_EPS = 0.05; // abaixo do arredondamento de exibição (0,1)
-  const simTables = outcome.bridge.tables.map((table) => {
-    const baseTable = pair.bridge.tables.find((t) => t.key === table.key);
-    return {
-      key: table.key,
-      title: table.title,
-      columns: scenarioColumns(table.columns, pair.source, pair.target),
-      rows: table.rows.map((row, i) => {
-        const baseRow =
-          baseTable?.rows.find(
-            (r, j) => r.label === row.label && r.kind === row.kind && j === i,
-          ) ??
-          baseTable?.rows.find(
-            (r) => r.label === row.label && r.kind === row.kind,
-          );
-        const baseValues = row.values.map(
-          (_, j) => baseRow?.values[j] ?? null,
-        );
-        const changed = row.values.map((v, j) => {
-          const b = baseValues[j];
-          if (v == null && b == null) return false;
-          if (v == null || b == null) return true;
-          return Math.abs(v - b) > CHANGE_EPS;
-        });
-        return { label: row.label, kind: row.kind, values: row.values, baseValues, changed };
-      }),
-    };
-  });
+  const simTables = buildSimulatedTables(outcome.bridge, pair.bridge).map(
+    (t) => ({
+      ...t,
+      columns: scenarioColumns(t.columns, pair.source, pair.target),
+    }),
+  );
 
   res.json(
     SimulateBridgeResponse.parse({

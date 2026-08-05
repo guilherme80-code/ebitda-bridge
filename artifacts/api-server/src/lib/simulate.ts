@@ -10,7 +10,12 @@
  * Como o driver de câmbio depende do próprio EBITDA (parcela de custo
  * doméstico), a solução é iterada algumas vezes até convergir.
  */
-import { computeBridge, type RawScenarioData, type BridgeResult } from "./bridge-calc";
+import {
+  computeBridge,
+  type RawScenarioData,
+  type BridgeResult,
+  type BridgeTable,
+} from "./bridge-calc";
 
 export interface Adjustment {
   scope:
@@ -210,6 +215,71 @@ export function simulateBridge(
   bridge = computeBridge(simSource, simTarget);
 
   return { bridge, applied, notFound };
+}
+
+export interface SimulatedTableRow {
+  label: string;
+  kind: "row" | "subtotal" | "total";
+  values: (number | null)[];
+  baseValues: (number | null)[];
+  changed: boolean[];
+}
+
+export interface SimulatedTable {
+  key: string;
+  title: string;
+  columns: BridgeTable["columns"];
+  rows: SimulatedTableRow[];
+}
+
+/** Abaixo do arredondamento de exibição (0,1) — diferenças menores não são
+ * marcadas como alteradas. */
+export const CHANGE_EPS = 0.05;
+
+/**
+ * Pareia as tabelas do bridge simulado com as do bridge original, produzindo
+ * para cada linha os valores simulados, os valores originais (`baseValues`) e
+ * as flags `changed` — sempre com o mesmo número de colunas/linhas do bridge
+ * simulado (que compartilha a estrutura do bridge base, pois os ajustes só
+ * alteram valores de linhas existentes).
+ */
+export function buildSimulatedTables(
+  sim: BridgeResult,
+  base: BridgeResult,
+): SimulatedTable[] {
+  return sim.tables.map((table) => {
+    const baseTable = base.tables.find((t) => t.key === table.key);
+    return {
+      key: table.key,
+      title: table.title,
+      columns: table.columns,
+      rows: table.rows.map((row, i) => {
+        const baseRow =
+          baseTable?.rows.find(
+            (r, j) => r.label === row.label && r.kind === row.kind && j === i,
+          ) ??
+          baseTable?.rows.find(
+            (r) => r.label === row.label && r.kind === row.kind,
+          );
+        const baseValues = row.values.map(
+          (_, j) => baseRow?.values[j] ?? null,
+        );
+        const changed = row.values.map((v, j) => {
+          const b = baseValues[j];
+          if (v == null && b == null) return false;
+          if (v == null || b == null) return true;
+          return Math.abs(v - b) > CHANGE_EPS;
+        });
+        return {
+          label: row.label,
+          kind: row.kind,
+          values: row.values,
+          baseValues,
+          changed,
+        };
+      }),
+    };
+  });
 }
 
 /** Catálogo de itens ajustáveis (união origem + destino), para orientar a
