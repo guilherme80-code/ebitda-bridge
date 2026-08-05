@@ -32,6 +32,7 @@ const CustomBar = (props: any) => {
   const simH = Math.max((sMax - sMin) * ppu, 2);
 
   const connectorY = isTotal ? simY : (isPositive ? simY : simY + simH);
+  const strokeColor = 'hsl(212 100% 48%)'; // brand-blue
 
   if (!compare) {
     return (
@@ -51,7 +52,7 @@ const CustomBar = (props: any) => {
         {payload.hasDetail && (
           <rect x={x} y={simY - 15} width={width} height={simH + 30} fill="transparent" style={{ cursor: 'pointer' }} />
         )}
-        <rect x={x} y={simY} width={width} height={simH} fill={fill} rx={3} />
+        <rect x={x} y={simY} width={width} height={simH} fill={fill} rx={0} />
         <text
           x={x + width / 2}
           y={simY - 10}
@@ -59,7 +60,7 @@ const CustomBar = (props: any) => {
           textAnchor="middle"
           fontSize={13}
           fontWeight={700}
-          fontFamily="var(--font-sans)"
+          fontFamily="var(--font-heading)"
         >
           {payload.value > 0 && !isTotal ? '+' : ''}{formatMUSD(payload.value)}
         </text>
@@ -90,7 +91,7 @@ const CustomBar = (props: any) => {
         />
       )}
       {/* Original (fantasma) */}
-      <rect x={x} y={baseY} width={half} height={baseH} fill="#94a3b8" opacity={0.45} rx={3} />
+      <rect x={x} y={baseY} width={half} height={baseH} fill="#94a3b8" opacity={0.45} rx={0} />
       {/* Simulado */}
       <rect
         x={x + half + gap}
@@ -98,8 +99,8 @@ const CustomBar = (props: any) => {
         width={half}
         height={simH}
         fill={fill}
-        rx={3}
-        stroke={changed ? 'hsl(239 84% 67%)' : 'none'}
+        rx={0}
+        stroke={changed ? strokeColor : 'none'}
         strokeWidth={changed ? 2.5 : 0}
       />
       <text
@@ -109,7 +110,7 @@ const CustomBar = (props: any) => {
         textAnchor="middle"
         fontSize={13}
         fontWeight={700}
-        fontFamily="var(--font-sans)"
+        fontFamily="var(--font-heading)"
       >
         {payload.value > 0 && !isTotal ? '+' : ''}{formatMUSD(payload.value)}
       </text>
@@ -117,11 +118,11 @@ const CustomBar = (props: any) => {
         <text
           x={x + width / 2}
           y={topY - 8}
-          fill="hsl(239 84% 67%)"
+          fill={strokeColor}
           textAnchor="middle"
           fontSize={11}
           fontWeight={700}
-          fontFamily="var(--font-sans)"
+          fontFamily="var(--font-heading)"
         >
           Δ {payload.value - payload.baseValue > 0 ? '+' : ''}{formatMUSD(payload.value - payload.baseValue)}
         </text>
@@ -137,11 +138,11 @@ const CustomTooltip = ({ active, payload }: any) => {
     if (data.compare) {
       const delta = data.value - data.baseValue;
       return (
-        <div className="bg-white border border-slate-200 shadow-xl rounded-xl p-4 min-w-[240px]">
-          <p className="font-bold text-slate-800 text-sm mb-3 pb-2 border-b border-slate-100">
+        <div className="bg-white border border-slate-200 shadow-xl p-4 min-w-[240px]">
+          <p className="font-bold text-slate-800 text-sm mb-3 pb-2 border-b border-slate-100 font-heading">
             {data.label}
             {data.changedStep && (
-              <span className="ml-2 align-middle text-[9px] font-bold uppercase tracking-widest text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+              <span className="ml-2 align-middle text-[9px] font-bold uppercase tracking-widest text-brand-blue bg-blue-50 px-1.5 py-0.5 border border-brand-blue/20">
                 Ajustado
               </span>
             )}
@@ -164,7 +165,7 @@ const CustomTooltip = ({ active, payload }: any) => {
           {Math.abs(delta) > CHANGE_EPS && (
             <div className="flex justify-between items-center text-sm">
               <span className="text-slate-500 font-medium">Δ Simulação</span>
-              <span className="font-bold text-indigo-600 font-mono">
+              <span className="font-bold text-brand-blue font-mono">
                 {delta > 0 ? '+' : ''}{formatMUSD(delta)} MUSD
               </span>
             </div>
@@ -173,8 +174,8 @@ const CustomTooltip = ({ active, payload }: any) => {
       );
     }
     return (
-      <div className="bg-white border border-slate-200 shadow-xl rounded-xl p-4 min-w-[220px]">
-        <p className="font-bold text-slate-800 text-sm mb-3 pb-2 border-b border-slate-100">{data.label}</p>
+      <div className="bg-white border border-slate-200 shadow-xl p-4 min-w-[220px]">
+        <p className="font-bold text-slate-800 text-sm mb-3 pb-2 border-b border-slate-100 font-heading">{data.label}</p>
         <div className="flex justify-between items-center text-sm mb-1.5">
           <span className="text-slate-500 font-medium">Impacto</span>
           <span className={cn(

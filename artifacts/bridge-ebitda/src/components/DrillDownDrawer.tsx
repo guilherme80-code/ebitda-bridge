@@ -63,18 +63,18 @@ export function DrillDownDrawer({
       {/* Drawer */}
       <div 
         className={cn(
-          "fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col border-l border-slate-200",
+          "fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col border-l-4 border-brand-orange",
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
-        <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-brand-navy text-white">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">{title}</h2>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mt-1.5">Detalhamento do Componente</p>
+            <h2 className="text-xl font-bold font-heading">{title}</h2>
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/60 mt-1.5">Detalhamento do Componente</p>
           </div>
           <button 
             onClick={handleClose}
-            className="p-2.5 hover:bg-slate-200 rounded-full transition-colors text-slate-500 hover:text-slate-700"
+            className="p-2.5 hover:bg-white/10 transition-colors text-white/80 hover:text-white"
           >
             <X className="w-5 h-5" />
           </button>
@@ -82,14 +82,14 @@ export function DrillDownDrawer({
 
         <div className="flex-1 overflow-y-auto p-8">
           {isLoading && (
-            <div className="flex flex-col items-center justify-center h-40 space-y-4 text-slate-400">
-              <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
-              <p className="text-sm font-medium">Buscando detalhamento...</p>
+            <div className="flex flex-col items-center justify-center h-40 space-y-4 text-brand-navy/40">
+              <Loader2 className="w-8 h-8 animate-spin" />
+              <p className="text-sm font-medium font-heading">Buscando detalhamento...</p>
             </div>
           )}
 
           {isError && (
-            <div className="bg-rose-50 text-rose-600 p-5 rounded-xl text-sm font-medium border border-rose-100">
+            <div className="bg-rose-50 text-rose-600 p-5 border border-rose-100 font-medium text-sm">
               Ocorreu um erro ao carregar os detalhes deste componente.
             </div>
           )}
@@ -97,15 +97,15 @@ export function DrillDownDrawer({
           {data && !isLoading && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* Component Summary */}
-              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex items-center justify-between shadow-sm">
+              <div className="bg-slate-50 p-6 border border-slate-100 flex items-center justify-between shadow-sm">
                 <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center border border-slate-200">
-                    <Layers className="w-5 h-5 text-slate-600" />
+                  <div className="w-12 h-12 bg-white shadow-sm flex items-center justify-center border border-slate-200">
+                    <Layers className="w-5 h-5 text-brand-navy" />
                   </div>
-                  <span className="font-bold text-slate-700">Impacto Consolidado</span>
+                  <span className="font-bold text-slate-700 font-heading">Impacto Consolidado</span>
                 </div>
                 <span className={cn(
-                  "text-2xl font-bold tracking-tight",
+                  "text-2xl font-bold tracking-tight font-heading",
                   data.value > 0 ? "text-emerald-600" : "text-rose-600"
                 )}>
                   {data.value > 0 ? '+' : ''}{formatMUSD(data.value)} <span className="text-sm font-semibold opacity-60 ml-1">{data.unit}</span>

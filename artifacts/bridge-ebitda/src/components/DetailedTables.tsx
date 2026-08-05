@@ -39,11 +39,11 @@ export function DetailedTables({ params, enabled, simulatedTables }: Props) {
   return (
     <section className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-both">
       <div className="px-1">
-        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+        <h2 className="text-xl font-bold font-heading text-slate-800 flex items-center gap-2">
           <Table2 className="w-5 h-5 text-slate-400" />
           Tabelas detalhadas por alavanca
           {simulating && (
-            <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-full">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-blue-50 border border-brand-blue/20 px-2.5 py-1">
               Simulação
             </span>
           )}
@@ -59,12 +59,12 @@ export function DetailedTables({ params, enabled, simulatedTables }: Props) {
       {tables.map((table) => (
         <div
           key={table.key}
-          className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
-            simulating ? 'border-indigo-100' : 'border-slate-200'
+          className={`bg-white border shadow-sm overflow-hidden ${
+            simulating ? 'border-brand-blue/40' : 'border-slate-200'
           } ${table.key === 'sales' ? 'xl:col-span-2' : ''}`}
         >
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h3 className="font-bold text-slate-800">{table.title}</h3>
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <h3 className="font-bold text-slate-800 font-heading">{table.title}</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm" data-testid={`table-${table.key}`}>
@@ -95,14 +95,14 @@ export function DetailedTables({ params, enabled, simulatedTables }: Props) {
                             ? 'bg-slate-100/80 font-bold text-slate-900 border-t-2 border-slate-200'
                             : 'bg-slate-50/70 font-semibold text-slate-700 border-t border-slate-200'
                           : rowChanged
-                            ? 'border-t border-indigo-100 bg-indigo-50/40 text-slate-700'
+                            ? 'border-t border-brand-blue/20 bg-blue-50/40 text-slate-700'
                             : 'border-t border-slate-100 text-slate-600 hover:bg-slate-50/50'
                       }
                     >
                       <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-inherit">
                         {row.label}
                         {rowChanged && row.kind === 'row' && (
-                          <span className="ml-2 align-middle text-[9px] font-bold uppercase tracking-widest text-indigo-600 bg-indigo-100/80 px-1.5 py-0.5 rounded">
+                          <span className="ml-2 align-middle text-[9px] font-bold uppercase tracking-widest text-brand-blue bg-blue-100/80 px-1.5 py-0.5 border border-brand-blue/10">
                             Ajustado
                           </span>
                         )}
@@ -117,10 +117,10 @@ export function DetailedTables({ params, enabled, simulatedTables }: Props) {
                           <td
                             key={j}
                             className={`px-4 py-2 text-right tabular-nums whitespace-nowrap align-top ${
-                              cellChanged ? 'bg-indigo-50/80' : ''
+                              cellChanged ? 'bg-blue-50/80' : ''
                             } ${colored ? (v! > 0 ? 'text-emerald-600' : 'text-rose-600') : ''}`}
                           >
-                            <span className={cellChanged ? 'font-bold text-indigo-800' : ''}>
+                            <span className={cellChanged ? 'font-bold text-brand-blue' : ''}>
                               {fmt(v)}
                             </span>
                             {cellChanged && (

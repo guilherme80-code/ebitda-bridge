@@ -14,6 +14,7 @@ import type { SimulateBridgeResponse } from '@workspace/api-client-react';
 import { ScenarioSelector } from '../components/ScenarioSelector';
 import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
+import logoUrl from "@assets/brand/arcelormittal-logo-white.svg";
 
 export default function Dashboard() {
   const { data: catalog, isLoading: loadingCatalog, isError: errorCatalog } = useListScenarios();
@@ -57,20 +58,25 @@ export default function Dashboard() {
   const targetScenario = catalog?.scenarios.find((s) => s.id === targetId);
 
   return (
-    <div className="min-h-[100dvh] bg-[hsl(var(--background))] p-4 md:p-8 flex flex-col font-sans">
-      <header className="mb-6 max-w-[1400px] mx-auto w-full">
-        <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-200/50 text-slate-600 text-[10px] font-bold uppercase tracking-widest mb-4">
-          FP&A Executive View
+    <div className="min-h-[100dvh] bg-[hsl(var(--background))] flex flex-col font-sans">
+      <header className="bg-brand-navy w-full text-white py-8 px-4 md:px-8 border-b-[3px] border-brand-orange shadow-md">
+        <div className="max-w-[1400px] mx-auto w-full">
+          <div className="mb-6">
+            <img src={logoUrl} alt="ArcelorMittal" className="h-8 md:h-10" />
+          </div>
+          <div className="inline-flex items-center px-2 py-0.5 bg-white/10 text-white text-[10px] font-bold uppercase tracking-widest mb-3 border border-white/20">
+            FP&A Executive View
+          </div>
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight font-heading text-white">
+            Bridge de EBITDA{sourceScenario && targetScenario ? ` — ${sourceScenario.label} vs ${targetScenario.label}` : ''}
+          </h1>
+          <p className="text-white/80 mt-2 font-medium text-sm md:text-base">
+            A variação explica a passagem do cenário de origem para o cenário de destino • Valores expressos em <strong className="text-white">{bridge?.unit || 'MUSD'}</strong>
+          </p>
         </div>
-        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-[hsl(var(--foreground))]">
-          Bridge de EBITDA{sourceScenario && targetScenario ? ` — ${sourceScenario.label} vs ${targetScenario.label}` : ''}
-        </h1>
-        <p className="text-[hsl(var(--muted-foreground))] mt-2 font-medium text-sm md:text-base">
-          A variação explica a passagem do cenário de origem para o cenário de destino • Valores expressos em <strong className="text-slate-700">{bridge?.unit || 'MUSD'}</strong>
-        </p>
       </header>
 
-      <div className="max-w-[1400px] mx-auto w-full flex-1 flex flex-col space-y-6">
+      <div className="max-w-[1400px] mx-auto w-full flex-1 flex flex-col space-y-6 p-4 md:p-8">
         {catalog && (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
             <ScenarioSelector
@@ -124,13 +130,13 @@ export default function Dashboard() {
         )}
 
         {!isLoading && !isError && bridge && (
-          <main className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-6 flex flex-col animate-in fade-in slide-in-from-bottom-8 duration-700 delay-150 fill-mode-both">
+          <main className="flex-1 bg-white border border-slate-200 shadow-sm p-3 sm:p-6 flex flex-col animate-in fade-in slide-in-from-bottom-8 duration-700 delay-150 fill-mode-both border-t-4 border-t-brand-navy">
             <div className="mb-8 px-4 pt-4 sm:p-0 flex flex-col sm:flex-row sm:justify-between sm:items-end">
               <div>
-                <h2 className="text-xl font-bold text-slate-800">
+                <h2 className="text-xl font-bold text-slate-800 font-heading">
                   Composição da Variação de EBITDA
                   {simulation && (
-                    <span className="ml-3 align-middle text-[10px] font-bold uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-full">
+                    <span className="ml-3 align-middle text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-blue-50 border border-brand-blue/20 px-2.5 py-1">
                       Simulação
                     </span>
                   )}
@@ -144,13 +150,13 @@ export default function Dashboard() {
               {simulation && (
                 <div className="flex items-center gap-4 mt-3 sm:mt-0" data-testid="legend-simulation">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                    <span className="w-3 h-3 rounded-sm bg-slate-400/60" /> Original
+                    <span className="w-3 h-3 bg-slate-400/60" /> Original
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                    <span className="w-3 h-3 rounded-sm bg-emerald-500" /> Simulado
+                    <span className="w-3 h-3 bg-emerald-500" /> Simulado
                   </span>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600">
-                    <span className="w-3 h-3 rounded-sm border-2 border-indigo-500 bg-white" /> Ajustado
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-blue">
+                    <span className="w-3 h-3 border-2 border-brand-blue bg-white" /> Ajustado
                   </span>
                 </div>
               )}

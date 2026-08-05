@@ -56,7 +56,7 @@ function ScenarioPicker({
     scenarios.some((s) => s.version === version && s.hasData);
 
   return (
-    <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3">
+    <div className="flex-1 bg-white border border-slate-200 shadow-sm px-4 py-3">
       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
         {title}
       </p>
@@ -66,7 +66,7 @@ function ScenarioPicker({
             Versão
           </span>
           <select
-            className="w-full text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400/40 cursor-pointer"
+            className="w-full text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-blue/40 cursor-pointer"
             value={selected?.version ?? ''}
             onChange={(e) => pick(e.target.value, selected?.period ?? '', 'version')}
           >
@@ -82,7 +82,7 @@ function ScenarioPicker({
             Período
           </span>
           <select
-            className="w-full text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400/40 cursor-pointer"
+            className="w-full text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-blue/40 cursor-pointer"
             value={selected?.period ?? ''}
             onChange={(e) => pick(selected?.version ?? versions[0], e.target.value, 'period')}
           >
@@ -131,7 +131,7 @@ export function ScenarioSelector({
           selectedId={sourceId}
           onSelect={(id) => onChange(id, targetId ?? id)}
         />
-        <div className="hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-slate-800 text-white shadow-sm shrink-0 self-center">
+        <div className="hidden md:flex items-center justify-center w-10 h-10 bg-brand-navy text-white shadow-sm shrink-0 self-center">
           <ArrowRight className="w-4 h-4" />
         </div>
         <ScenarioPicker
