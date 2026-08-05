@@ -6,6 +6,8 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "import-bridge": "tsx ./src/import-bridge.ts",
+    "export-indicadores": "tsx ./src/export-indicadores.ts",
+    "import-indicadores": "tsx ./src/import-indicadores.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
