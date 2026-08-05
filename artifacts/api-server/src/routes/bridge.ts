@@ -21,7 +21,7 @@ import {
   SimulateBridgeBody,
   SimulateBridgeResponse,
 } from "@workspace/api-zod";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
 import {
   simulateBridge,
   buildCatalog,
@@ -340,16 +340,19 @@ Regras:
 
   let parsed: { interpretation?: string; adjustments?: Adjustment[] };
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5.6-terra",
-      max_completion_tokens: 8192,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: body.data.prompt },
-      ],
+    const completion = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      system,
+      messages: [{ role: "user", content: body.data.prompt }],
     });
-    parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+    const text = completion.content.find((block) => block.type === "text");
+    const rawText = text?.type === "text" ? text.text.trim() : "{}";
+    const jsonText = rawText
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+    parsed = JSON.parse(jsonText);
   } catch (err) {
     console.error("simulate: falha ao interpretar prompt", err);
     res.status(400).json({

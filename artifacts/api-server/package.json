@@ -18,6 +18,7 @@
     "express": "^5.2.1",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0",
+    "@workspace/integrations-anthropic-ai": "workspace:*",
     "@workspace/integrations-openai-ai-server": "workspace:*"
   },
   "devDependencies": {
