@@ -88,6 +88,23 @@ export interface BridgeDetailLine {
   /** Impact in MUSD. */
   value: number;
   sortOrder: number;
+  /** True when the line is a managerial adjustment (tipo_registro = ajuste). */
+  isAdjustment: boolean;
+  /**
+     * Justification of the adjustment (only for adjustments).
+     * @nullable
+     */
+  justification: string | null;
+  /**
+     * Responsible for the adjustment (only for adjustments).
+     * @nullable
+     */
+  responsible: string | null;
+  /**
+     * Approval status of the adjustment (only for adjustments).
+     * @nullable
+     */
+  status: string | null;
 }
 
 export interface BridgeComponentDetail {

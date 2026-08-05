@@ -85,7 +85,11 @@ export const GetBridgeComponentResponse = zod.object({
   "label": zod.string(),
   "group": zod.string().nullable().describe('Optional sub-grouping inside the component (e.g. Volume vs Mix, product family).'),
   "value": zod.number().describe('Impact in MUSD.'),
-  "sortOrder": zod.number()
+  "sortOrder": zod.number(),
+  "isAdjustment": zod.boolean().describe('True when the line is a managerial adjustment (tipo_registro = ajuste).'),
+  "justification": zod.string().nullable().describe('Justification of the adjustment (only for adjustments).'),
+  "responsible": zod.string().nullable().describe('Responsible for the adjustment (only for adjustments).'),
+  "status": zod.string().nullable().describe('Approval status of the adjustment (only for adjustments).')
 }).describe('One supporting line of a bridge component drill-down.'))
 })
 

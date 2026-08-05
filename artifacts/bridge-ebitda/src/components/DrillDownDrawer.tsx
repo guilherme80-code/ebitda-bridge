@@ -121,16 +121,41 @@ export function DrillDownDrawer({
                     </h3>
                     <div className="space-y-1">
                       {lines.map((line) => (
-                        <div key={line.id} className="flex justify-between items-center py-2.5 px-3 hover:bg-slate-50 rounded-lg transition-colors group">
-                          <span className="text-[13px] font-semibold text-slate-600 group-hover:text-slate-900 transition-colors">
-                            {line.label}
-                          </span>
-                          <span className={cn(
-                            "text-sm font-bold font-mono",
-                            line.value > 0 ? "text-emerald-600" : "text-rose-600"
-                          )}>
-                            {line.value > 0 ? '+' : ''}{formatMUSD(line.value)}
-                          </span>
+                        <div
+                          key={line.id}
+                          className={cn(
+                            "py-2.5 px-3 rounded-lg transition-colors group",
+                            line.isAdjustment
+                              ? "bg-amber-50 border border-amber-200 hover:bg-amber-100/70"
+                              : "hover:bg-slate-50",
+                          )}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="text-[13px] font-semibold text-slate-600 group-hover:text-slate-900 transition-colors flex items-center gap-2">
+                              {line.label}
+                              {line.isAdjustment && (
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">
+                                  Ajuste gerencial
+                                </span>
+                              )}
+                            </span>
+                            <span className={cn(
+                              "text-sm font-bold font-mono",
+                              line.value > 0 ? "text-emerald-600" : "text-rose-600"
+                            )}>
+                              {line.value > 0 ? '+' : ''}{formatMUSD(line.value)}
+                            </span>
+                          </div>
+                          {line.isAdjustment && (line.justification || line.responsible || line.status) && (
+                            <div className="mt-1.5 text-[12px] text-amber-800/90 space-y-0.5">
+                              {line.justification && <p>{line.justification}</p>}
+                              <p className="font-semibold">
+                                {line.responsible && <>Responsável: {line.responsible}</>}
+                                {line.responsible && line.status && ' • '}
+                                {line.status && <>Status: {line.status}</>}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
