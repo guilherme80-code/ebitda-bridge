@@ -14,8 +14,10 @@ function fmt(v: number | undefined): string {
 }
 
 /**
- * Pop-up com a tabela de explicação de mercado (ex.: Iron Ores) vinculada ao
- * item clicado nas tabelas de detalhe — colunas origem, destino, Var, kt e $m.
+ * Pop-up com a tabela de explicação (ex.: Iron Ores) vinculada ao item clicado
+ * nas tabelas de detalhe — colunas origem, destino, Var, kt e $m. As
+ * explicações são armazenadas por mês: para pares FY/trimestre a tabela
+ * principal mostra a soma e uma seção adicional traz o detalhe mês a mês.
  */
 export function MarketExplanationDialog({
   explanation,
@@ -53,12 +55,12 @@ export function MarketExplanationDialog({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={`Explicação de mercado: ${explanation.title}`}
+        aria-label={`Explicações: ${explanation.title}`}
       >
         <div className="flex items-start justify-between px-6 py-5 bg-brand-navy text-white">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-1">
-              Explicação de mercado
+              Explicações
             </p>
             <h2 className="text-xl font-bold font-heading flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-brand-orange" />
@@ -136,8 +138,54 @@ export function MarketExplanationDialog({
           </table>
         </div>
 
+        {explanation.months.length > 1 && (
+          <div className="px-6 py-4 border-t border-slate-200 max-h-[40vh] overflow-y-auto" data-testid="section-monthly-detail">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
+              Detalhe por mês — soma acima consolida {explanation.months.length} meses
+            </p>
+            <div className="space-y-4">
+              {explanation.months.map((m) => (
+                <div key={m.periodLabel} data-testid={`month-detail-${m.periodLabel}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-700">{m.periodLabel}</span>
+                    <span
+                      className={cn(
+                        'text-xs font-bold tabular-nums',
+                        m.totalMusd > 0 ? 'text-emerald-600' : m.totalMusd < 0 ? 'text-rose-600' : 'text-slate-500',
+                      )}
+                    >
+                      {fmt(m.totalMusd)} $m
+                    </span>
+                  </div>
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {m.lines.map((line) => (
+                        <tr key={line.id} className="border-t border-slate-100 text-slate-500">
+                          <td className="py-1 pr-2">{line.label}</td>
+                          <td className="py-1 text-right tabular-nums w-16">{fmt(line.sourceValue)}</td>
+                          <td className="py-1 text-right tabular-nums w-16">{fmt(line.targetValue)}</td>
+                          <td className="py-1 text-right tabular-nums w-14">{fmt(line.varValue)}</td>
+                          <td className="py-1 text-right tabular-nums w-16">{fmt(line.volumeKt)}</td>
+                          <td
+                            className={cn(
+                              'py-1 text-right tabular-nums font-semibold w-16',
+                              line.impactMusd > 0 ? 'text-emerald-600' : line.impactMusd < 0 ? 'text-rose-600' : '',
+                            )}
+                          >
+                            {fmt(line.impactMusd)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-[11px] font-medium text-slate-400">
-          Dados de mercado importados — informativos, não alteram o cálculo do bridge.
+          Dados importados — informativos, não alteram o cálculo do bridge.
         </div>
       </div>
     </div>

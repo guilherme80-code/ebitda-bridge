@@ -86,17 +86,33 @@ export async function seedIfEmpty(): Promise<void> {
   const existing = await db.select().from(scenariosTable).limit(1);
   if (existing.length > 0) {
     // Banco já semeado por uma versão anterior: garante o backfill das
-    // explicações de mercado (tabelas novas ficam vazias após o upgrade de
-    // schema; nunca sobrescreve dados já importados).
-    const hasMarket = await db.select().from(marketExplanationsTable).limit(1);
+    // explicações (tabelas novas ficam vazias após o upgrade de schema) e a
+    // migração do formato antigo (explicações guardadas por par FY/trimestre)
+    // para o formato mensal — o painel só lê pares mensais agora. Nunca
+    // sobrescreve dados já importados no formato mensal.
+    const marketHeads = await db
+      .select({ sourceId: marketExplanationsTable.sourceId })
+      .from(marketExplanationsTable);
+    const isMonthly = (id: string) => /^fy\d{2}_m\d{2}_/.test(id);
+    const onlyLegacy =
+      marketHeads.length > 0 && marketHeads.every((h) => !isMonthly(h.sourceId));
     const seedHasMarket =
       (((seed as Record<string, unknown>).market_explanations as Row[] | undefined) ?? []).length > 0;
-    if (hasMarket.length === 0 && seedHasMarket) {
-      logger.info("Backfill das explicações de mercado (seed)");
+    if ((marketHeads.length === 0 || onlyLegacy) && seedHasMarket) {
+      logger.info(
+        marketHeads.length === 0
+          ? "Backfill das explicações (seed)"
+          : "Migrando explicações do formato por período para o mensal (seed)",
+      );
       await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
-        const check = await tx.select().from(marketExplanationsTable).limit(1);
-        if (check.length > 0) return;
+        const check = await tx
+          .select({ sourceId: marketExplanationsTable.sourceId })
+          .from(marketExplanationsTable);
+        if (check.some((h) => isMonthly(h.sourceId))) return;
+        await tx.delete(marketExplanationItemsTable);
+        await tx.delete(marketExplanationLinesTable);
+        await tx.delete(marketExplanationsTable);
         await seedMarketExplanations(tx);
       });
     }

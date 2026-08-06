@@ -62,10 +62,7 @@ function fazErro(rotulo: Rotulador) {
   };
 }
 
-/** Deriva o id de cenário na convenção do painel. Diferente da fonte de
- *  indicadores (mensal), explicações de mercado podem referenciar qualquer
- *  granularidade — FY26, Q126..Q426 ou JAN26..DEC26 — pois os cenários FY e
- *  trimestrais são derivados pelo painel e têm ids próprios. */
+/** Deriva o id de cenário na convenção do painel. */
 export function scenarioIdDe(
   versao: string,
   periodo: string,
@@ -90,6 +87,27 @@ export function scenarioIdDe(
   throw new Error(
     `${rotulo(linha)}: periodo desconhecido: "${periodo}" (esperado FY26, Q126..Q426 ou JAN26..DEC26)`,
   );
+}
+
+/**
+ * As explicações são armazenadas POR MÊS (a fonte é mensal, como as demais
+ * fontes do painel); FY e trimestres são somados na leitura. Rejeita períodos
+ * FY/trimestre na importação.
+ */
+export function exigirMensal(
+  id: string,
+  campo: string,
+  linha: number,
+  rotulo: Rotulador,
+): string {
+  if (!/^fy\d{2}_m\d{2}_/.test(id)) {
+    fazErro(rotulo)(
+      linha,
+      `${campo} deve ser um mês (JAN26..DEC26) — as explicações são armazenadas ` +
+        `por mês e somadas pelo painel para FY/trimestre`,
+    );
+  }
+  return id;
 }
 
 export type RegistroExplicacao = {
@@ -146,15 +164,25 @@ export function validarLinhaExplicacao(
 ): RegistroExplicacao {
   const erro = fazErro(rotulo);
   const linha = posicao;
-  const sourceId = scenarioIdDe(
-    texto(r, "versao_origem", linha, erro),
-    texto(r, "periodo_origem", linha, erro),
+  const sourceId = exigirMensal(
+    scenarioIdDe(
+      texto(r, "versao_origem", linha, erro),
+      texto(r, "periodo_origem", linha, erro),
+      linha,
+      rotulo,
+    ),
+    "periodo_origem",
     linha,
     rotulo,
   );
-  const targetId = scenarioIdDe(
-    texto(r, "versao_destino", linha, erro),
-    texto(r, "periodo_destino", linha, erro),
+  const targetId = exigirMensal(
+    scenarioIdDe(
+      texto(r, "versao_destino", linha, erro),
+      texto(r, "periodo_destino", linha, erro),
+      linha,
+      rotulo,
+    ),
+    "periodo_destino",
     linha,
     rotulo,
   );
@@ -191,15 +219,25 @@ export function validarLinhaItem(
   const linha = posicao;
   return {
     linha,
-    sourceId: scenarioIdDe(
-      texto(r, "versao_origem", linha, erro),
-      texto(r, "periodo_origem", linha, erro),
+    sourceId: exigirMensal(
+      scenarioIdDe(
+        texto(r, "versao_origem", linha, erro),
+        texto(r, "periodo_origem", linha, erro),
+        linha,
+        rotulo,
+      ),
+      "periodo_origem",
       linha,
       rotulo,
     ),
-    targetId: scenarioIdDe(
-      texto(r, "versao_destino", linha, erro),
-      texto(r, "periodo_destino", linha, erro),
+    targetId: exigirMensal(
+      scenarioIdDe(
+        texto(r, "versao_destino", linha, erro),
+        texto(r, "periodo_destino", linha, erro),
+        linha,
+        rotulo,
+      ),
+      "periodo_destino",
       linha,
       rotulo,
     ),
@@ -295,9 +333,8 @@ export function montarDadosMercado(
 }
 
 /**
- * Confere se todos os cenários referenciados existem no catálogo do painel.
- * A base guarda apenas cenários mensais; ids FY/Q são derivados pelo painel,
- * então para eles basta existir ao menos um mês da mesma versão/ano.
+ * Confere se todos os cenários mensais referenciados existem no catálogo do
+ * painel (a base guarda apenas cenários mensais; FY/Q são derivados na leitura).
  */
 export async function conferirCenarios(d: DadosMercado): Promise<void> {
   const ids = [
@@ -306,15 +343,7 @@ export async function conferirCenarios(d: DadosMercado): Promise<void> {
   if (ids.length === 0) return;
   const todos = await db.select({ id: scenariosTable.id }).from(scenariosTable);
   const conhecidos = new Set(todos.map((r) => r.id));
-  const existe = (id: string): boolean => {
-    if (conhecidos.has(id)) return true;
-    const derivado = id.match(/^fy(\d{2})_(?:fy|q[1-4])_(.+)$/);
-    if (!derivado) return false;
-    const prefixo = `fy${derivado[1]}_m`;
-    const sufixo = `_${derivado[2]}`;
-    return todos.some((r) => r.id.startsWith(prefixo) && r.id.endsWith(sufixo));
-  };
-  const faltando = ids.filter((id) => !existe(id));
+  const faltando = ids.filter((id) => !conhecidos.has(id));
   if (faltando.length > 0) {
     throw new Error(
       `Cenários não encontrados no catálogo do painel: ${faltando.join(", ")}. ` +

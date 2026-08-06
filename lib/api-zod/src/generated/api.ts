@@ -274,8 +274,21 @@ export const ListMarketExplanationsResponse = zod.object({
   "varValue": zod.number().optional().describe('Variation between target and source, as imported.'),
   "volumeKt": zod.number().optional().describe('Impacted volume in kt.'),
   "impactMusd": zod.number().describe('Impact on the EBITDA variation, in MUSD ($m).')
+}).describe('One line of a market explanation table (e.g. \"Pellet premium\"). Value fields are omitted when the source has no value for them (e.g. Forex\/Others rows only carry the impact).')),
+  "months": zod.array(zod.object({
+  "periodLabel": zod.string().describe('Month label (e.g. JAN26).'),
+  "totalMusd": zod.number().describe('Sum of the month\'s line impacts in MUSD.'),
+  "lines": zod.array(zod.object({
+  "id": zod.number(),
+  "label": zod.string(),
+  "sourceValue": zod.number().optional().describe('Value in the source scenario (e.g. price $\/t).'),
+  "targetValue": zod.number().optional().describe('Value in the target scenario.'),
+  "varValue": zod.number().optional().describe('Variation between target and source, as imported.'),
+  "volumeKt": zod.number().optional().describe('Impacted volume in kt.'),
+  "impactMusd": zod.number().describe('Impact on the EBITDA variation, in MUSD ($m).')
 }).describe('One line of a market explanation table (e.g. \"Pellet premium\"). Value fields are omitted when the source has no value for them (e.g. Forex\/Others rows only carry the impact).'))
-}).describe('An imported market explanation table (e.g. Iron Ores) for a scenario pair, with its detail lines and the bridge items it impacts.'))
+}).describe('Per-month detail of an explanation when the requested pair covers more than one month (explanations are stored monthly; FY\/quarter figures are the sum of the months).')).describe('Per-month detail (one entry per month with imported data in the interval).')
+}).describe('An imported explanation table (e.g. Iron Ores) for a scenario pair. Stored monthly; for FY\/quarter pairs the lines and total are the sum of the months in the interval, and `months` carries the per-month detail. Price columns (source\/target\/var) are only present when the pair covers a single month.'))
 })
 
 

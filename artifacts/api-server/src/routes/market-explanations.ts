@@ -1,16 +1,21 @@
 import { Router, type IRouter } from "express";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import {
   db,
   marketExplanationsTable,
   marketExplanationLinesTable,
   marketExplanationItemsTable,
 } from "@workspace/db";
+import {
+  monthPairsOf,
+  consolidateMarketExplanations,
+} from "../lib/market-consolidate";
 
 const router: IRouter = Router();
 
-// GET /bridge/market-explanations?source&target — imported market explanation
-// tables (e.g. Iron Ores) for a pair, with detail lines and impacted items.
+// GET /bridge/market-explanations?source&target — explicações importadas (ex.:
+// Iron Ores), armazenadas por mês. Para pares FY/trimestre, expande em pares
+// mensais, soma os impactos e devolve também o detalhe mês a mês.
 router.get("/bridge/market-explanations", async (req, res) => {
   const source = typeof req.query.source === "string" ? req.query.source : "";
   const target = typeof req.query.target === "string" ? req.query.target : "";
@@ -19,18 +24,27 @@ router.get("/bridge/market-explanations", async (req, res) => {
       .status(400)
       .json({ error: "Informe os cenários de origem e destino." });
   }
+  const pairs = monthPairsOf(source, target);
+  if (pairs === null) {
+    return res.status(400).json({
+      error:
+        "Os períodos de origem e destino têm granularidades diferentes (ano vs trimestre vs mês).",
+    });
+  }
+  if (pairs.length === 0) return res.json({ explanations: [] });
+
   const heads = await db
     .select()
     .from(marketExplanationsTable)
     .where(
-      and(
-        eq(marketExplanationsTable.sourceId, source),
-        eq(marketExplanationsTable.targetId, target),
+      or(
+        ...pairs.map((p) =>
+          and(
+            eq(marketExplanationsTable.sourceId, p.sourceId),
+            eq(marketExplanationsTable.targetId, p.targetId),
+          ),
+        ),
       ),
-    )
-    .orderBy(
-      asc(marketExplanationsTable.sortOrder),
-      asc(marketExplanationsTable.id),
     );
   if (heads.length === 0) return res.json({ explanations: [] });
 
@@ -51,27 +65,13 @@ router.get("/bridge/market-explanations", async (req, res) => {
       .orderBy(asc(marketExplanationItemsTable.id)),
   ]);
 
-  const explanations = heads.map((h) => {
-    const myLines = lines.filter((l) => l.explanationId === h.id);
-    return {
-      id: h.id,
-      sourceId: h.sourceId,
-      targetId: h.targetId,
-      title: h.title,
-      unitLabel: h.unitLabel,
-      totalMusd: myLines.reduce((acc, l) => acc + l.impactMusd, 0),
-      items: items.filter((i) => i.explanationId === h.id).map((i) => i.item),
-      lines: myLines.map((l) => ({
-        id: l.id,
-        label: l.label,
-        ...(l.sourceValue != null ? { sourceValue: l.sourceValue } : {}),
-        ...(l.targetValue != null ? { targetValue: l.targetValue } : {}),
-        ...(l.varValue != null ? { varValue: l.varValue } : {}),
-        ...(l.volumeKt != null ? { volumeKt: l.volumeKt } : {}),
-        impactMusd: l.impactMusd,
-      })),
-    };
-  });
+  const explanations = consolidateMarketExplanations(
+    { sourceId: source, targetId: target },
+    pairs,
+    heads,
+    lines,
+    items,
+  );
   return res.json({ explanations });
 });
 

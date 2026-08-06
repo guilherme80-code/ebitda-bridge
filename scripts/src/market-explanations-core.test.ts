@@ -11,9 +11,9 @@ const rotulo: Rotulador = (l) => `Linha ${l}`;
 
 const base = {
   versao_origem: "BUDGET",
-  periodo_origem: "FY26",
+  periodo_origem: "JAN26",
   versao_destino: "MRF7",
-  periodo_destino: "FY26",
+  periodo_destino: "JAN26",
   explicacao: "Iron Ores",
   unidade: "Price $/t",
 };
@@ -46,8 +46,8 @@ describe("validarLinhaExplicacao", () => {
       2,
       rotulo,
     );
-    expect(cheia.sourceId).toBe("fy26_fy_budget");
-    expect(cheia.targetId).toBe("fy26_fy_mrf7");
+    expect(cheia.sourceId).toBe("fy26_m01_budget");
+    expect(cheia.targetId).toBe("fy26_m01_mrf7");
     expect(cheia.impactoMusd).toBe(-36);
     const soImpacto = validarLinhaExplicacao(
       linha({ linha: "Forex (contract)", valor_origem: null, valor_destino: null, variacao: null, kt: null, impacto_musd: -6 }),
@@ -72,6 +72,18 @@ describe("validarLinhaExplicacao", () => {
       ),
     ).toThrow(/Linha 6.*origem e destino iguais/);
   });
+  it("rejeita períodos FY/trimestre — armazenamento é mensal", () => {
+    expect(() =>
+      validarLinhaExplicacao(linha({ periodo_origem: "FY26", periodo_destino: "FY26", linha: "X", impacto_musd: 1 }), 9, rotulo),
+    ).toThrow(/Linha 9.*periodo_origem deve ser um mês/);
+    expect(() =>
+      validarLinhaExplicacao(linha({ periodo_destino: "Q126", linha: "X", impacto_musd: 1 }), 10, rotulo),
+    ).toThrow(/Linha 10.*periodo_destino deve ser um mês/);
+    expect(() =>
+      validarLinhaItem(linha({ periodo_origem: "FY26", item: "Fines" }), 11, rotulo),
+    ).toThrow(/Linha 11.*periodo_origem deve ser um mês/);
+  });
+
   it("rejeita valor opcional não numérico", () => {
     expect(() =>
       validarLinhaExplicacao(linha({ linha: "X", kt: "muito", impacto_musd: 1 }), 8, rotulo),
@@ -97,8 +109,8 @@ describe("montarDadosMercado", () => {
     );
     expect(d.explanations).toHaveLength(1);
     expect(d.explanations[0]).toMatchObject({
-      sourceId: "fy26_fy_budget",
-      targetId: "fy26_fy_mrf7",
+      sourceId: "fy26_m01_budget",
+      targetId: "fy26_m01_mrf7",
       title: "Iron Ores",
       unitLabel: "Price $/t",
     });
@@ -117,7 +129,7 @@ describe("montarDadosMercado", () => {
       rotulo,
     );
     expect(d.explanations).toHaveLength(2);
-    expect(d.explanations.map((e) => e.targetId)).toEqual(["fy26_fy_mrf7", "fy26_fy_mrf6"]);
+    expect(d.explanations.map((e) => e.targetId)).toEqual(["fy26_m01_mrf7", "fy26_m01_mrf6"]);
   });
 
   it("rejeita linha duplicada na mesma explicação", () => {

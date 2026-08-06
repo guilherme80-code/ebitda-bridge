@@ -6,9 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { MarketExplanationLine } from './marketExplanationLine';
+import type { MarketExplanationMonth } from './marketExplanationMonth';
 
 /**
- * An imported market explanation table (e.g. Iron Ores) for a scenario pair, with its detail lines and the bridge items it impacts.
+ * An imported explanation table (e.g. Iron Ores) for a scenario pair. Stored monthly; for FY/quarter pairs the lines and total are the sum of the months in the interval, and `months` carries the per-month detail. Price columns (source/target/var) are only present when the pair covers a single month.
  */
 export interface MarketExplanation {
   id: number;
@@ -23,4 +24,6 @@ export interface MarketExplanation {
   /** Labels of the bridge items impacted by this explanation (e.g. Fines, Pellets, Lumps). */
   items: string[];
   lines: MarketExplanationLine[];
+  /** Per-month detail (one entry per month with imported data in the interval). */
+  months: MarketExplanationMonth[];
 }

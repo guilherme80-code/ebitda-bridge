@@ -18,7 +18,7 @@ export function DrillDownDrawer({
   source?: string;
   target?: string;
   onClose: () => void;
-  /** Itens com explicação de mercado vinculada (rótulos normalizados). */
+  /** Itens com explicação vinculada (rótulos normalizados). */
   hasMarketExplanation?: (label: string) => boolean;
   /** Clique em um item vinculado abre o pop-up da explicação. */
   onMarketItemClick?: (label: string) => void;
@@ -133,7 +133,7 @@ export function DrillDownDrawer({
                               type="button"
                               onClick={() => onMarketItemClick(line.label)}
                               className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-blue hover:underline underline-offset-2 cursor-pointer"
-                              title="Ver explicação de mercado"
+                              title="Ver explicação"
                               data-testid={`button-market-line-${line.id}`}
                             >
                               {line.label}
