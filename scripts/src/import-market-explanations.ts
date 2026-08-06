@@ -40,6 +40,7 @@ function lerAba(
   nome: string,
   colunas: readonly string[],
   arquivo: string,
+  permitirVazia = false,
 ): Record<string, unknown>[] {
   const ws = wb.Sheets[nome];
   if (!ws) {
@@ -48,7 +49,11 @@ function lerAba(
     );
   }
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null });
-  if (raw.length === 0) throw new Error(`Aba "${nome}" está vazia`);
+  if (raw.length === 0) {
+    // Sem linhas de dados: aceitável para relações opcionais (ex.: Itens).
+    if (permitirVazia) return [];
+    throw new Error(`Aba "${nome}" está vazia`);
+  }
   const headers = Object.keys(raw[0]);
   const faltando = colunas.filter((c) => !headers.includes(c));
   if (faltando.length > 0) {
@@ -69,7 +74,7 @@ async function main() {
   const nome = path.basename(filePath);
 
   const rawExp = lerAba(wb, SHEET_EXPLICACOES, COLUNAS_EXPLICACOES, nome);
-  const rawItens = lerAba(wb, SHEET_ITENS, COLUNAS_ITENS, nome);
+  const rawItens = lerAba(wb, SHEET_ITENS, COLUNAS_ITENS, nome, true);
 
   const rotuloExp: Rotulador = (l) => `Aba "${SHEET_EXPLICACOES}", linha ${l}`;
   const rotuloItem: Rotulador = (l) => `Aba "${SHEET_ITENS}", linha ${l}`;

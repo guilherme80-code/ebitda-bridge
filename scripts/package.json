@@ -11,6 +11,7 @@
     "import-databricks": "tsx ./src/import-databricks.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "import-market-explanations": "tsx ./src/import-market-explanations.ts",
+    "export-market-explanations": "tsx ./src/export-market-explanations.ts",
     "test": "vitest run"
   },
   "devDependencies": {
