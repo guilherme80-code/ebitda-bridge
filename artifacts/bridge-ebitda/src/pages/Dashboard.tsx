@@ -160,6 +160,26 @@ export default function Dashboard() {
                     : 'Clique nas alavancas com detalhamento para análise aprofundada (drill-down).'}
                 </p>
               </div>
+              {!simulation &&
+                discrepancyOf(bridge.steps) !== undefined &&
+                explainedTotal !== undefined &&
+                Math.abs(explainedTotal) > 1e-9 && (
+                  <div className="flex items-center gap-4 mt-3 sm:mt-0" data-testid="legend-explained">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                      <span
+                        className="w-3 h-3 border border-dashed border-slate-500"
+                        style={{
+                          backgroundImage:
+                            'repeating-linear-gradient(45deg, rgba(100,116,139,0.45) 0 2px, rgba(100,116,139,0.12) 2px 6px)',
+                        }}
+                      />{' '}
+                      Explicado
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                      <span className="w-3 h-3 bg-rose-500" /> Não explicado
+                    </span>
+                  </div>
+                )}
               {simulation && (
                 <div className="flex items-center gap-4 mt-3 sm:mt-0" data-testid="legend-simulation">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">

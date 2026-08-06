@@ -30,10 +30,15 @@ export function discrepancyOf(steps: BridgeStep[]): number | undefined {
  * Explicado" (bridge fecha pela fonte) ou com `explainedTotal === undefined`
  * (explicações ainda não carregadas), os passos ficam como vieram.
  */
+export type StepWithExplanation = BridgeStep & {
+  /** Parte da diferença já explicada (MUSD), anotada no passo "Não Explicado". */
+  explainedMusd?: number;
+};
+
 export function applyExplanations(
   steps: BridgeStep[],
   explainedTotal: number | undefined,
-): BridgeStep[] {
+): StepWithExplanation[] {
   if (explainedTotal === undefined) return steps;
   const idx = steps.findIndex((s) => s.key === UNEXPLAINED_STEP_KEY);
   if (idx < 0) return steps;
@@ -46,7 +51,12 @@ export function applyExplanations(
     idx > 0 ? steps[idx - 1].cumulative : steps[idx].cumulative - steps[idx].value;
   return [
     ...steps.slice(0, idx),
-    { ...steps[idx], value: remainder, cumulative: prevCumulative + remainder },
+    {
+      ...steps[idx],
+      value: remainder,
+      cumulative: prevCumulative + remainder,
+      explainedMusd: steps[idx].value - remainder,
+    },
     ...steps.slice(idx + 1),
   ];
 }

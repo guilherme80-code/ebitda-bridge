@@ -70,6 +70,8 @@ describe('applyExplanations', () => {
     // 753.9 − 2.2 = 751.7; o degrau até 747.7 é a parte explicada.
     expect(step.cumulative).toBeCloseTo(out[idx - 1].cumulative + step.value, 10);
     expect(step.cumulative).toBeCloseTo(751.7, 10);
+    // A parte já explicada fica anotada no passo, para marcação no gráfico.
+    expect(step.explainedMusd).toBeCloseTo(-4, 10);
   });
 
   it('tudo explicado (resíduo ~zero): coluna some', () => {

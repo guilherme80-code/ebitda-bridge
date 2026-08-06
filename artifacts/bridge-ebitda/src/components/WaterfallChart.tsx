@@ -35,6 +35,38 @@ const CustomBar = (props: any) => {
   const connectorY = isTotal ? simY : (isPositive ? simY : simY + simH);
   const strokeColor = 'hsl(212 100% 48%)'; // brand-blue
 
+  // Trecho hachurado "Explicado" (parte da diferença já justificada).
+  const explainedRange = payload.explainedRange as [number, number] | undefined;
+  const patternId = `explained-hatch-${index}`;
+  const explainedRect = explainedRange
+    ? {
+        y: toY(explainedRange[1]),
+        h: Math.max((explainedRange[1] - explainedRange[0]) * ppu, 2),
+      }
+    : undefined;
+  const renderExplained = (rx: number, rw: number) =>
+    explainedRect ? (
+      <>
+        <defs>
+          <pattern id={patternId} width={6} height={6} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width={6} height={6} fill={fill} opacity={0.12} />
+            <line x1={0} y1={0} x2={0} y2={6} stroke={fill} strokeWidth={2} opacity={0.45} />
+          </pattern>
+        </defs>
+        <rect
+          x={rx}
+          y={explainedRect.y}
+          width={rw}
+          height={explainedRect.h}
+          fill={`url(#${patternId})`}
+          stroke={fill}
+          strokeWidth={1}
+          strokeDasharray="3 3"
+          opacity={0.9}
+        />
+      </>
+    ) : null;
+
   if (!compare) {
     return (
       <g className={cn("transition-opacity duration-300", payload.hasDetail ? "hover:opacity-80 cursor-pointer" : "")}>
@@ -54,6 +86,7 @@ const CustomBar = (props: any) => {
           <rect x={x} y={simY - 15} width={width} height={simH + 30} fill="transparent" style={{ cursor: 'pointer' }} />
         )}
         <rect x={x} y={simY} width={width} height={simH} fill={fill} rx={0} />
+        {renderExplained(x, width)}
         <text
           x={x + width / 2}
           y={simY - 10}
@@ -104,6 +137,7 @@ const CustomBar = (props: any) => {
         stroke={changed ? strokeColor : 'none'}
         strokeWidth={changed ? 2.5 : 0}
       />
+      {renderExplained(x + half + gap, half)}
       <text
         x={x + width / 2}
         y={topY - (changed ? 24 : 10)}
@@ -191,6 +225,14 @@ const CustomTooltip = ({ active, payload }: any) => {
             Parte da variação ainda sem explicação registrada no painel abaixo.
           </p>
         )}
+        {data.key === 'unexplained' && data.explainedMusd !== undefined && Math.abs(data.explainedMusd) > 1e-9 && (
+          <div className="flex justify-between items-center text-sm mb-1.5">
+            <span className="text-slate-500 font-medium">Explicado</span>
+            <span className="font-bold text-slate-700 font-mono">
+              {data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.explainedMusd)} MUSD
+            </span>
+          </div>
+        )}
         {!data.isTotal && data.key !== 'unexplained' && (
           <div className="flex justify-between items-center text-sm">
             <span className="text-slate-500 font-medium">Acumulado</span>
@@ -265,6 +307,16 @@ export function WaterfallChart({ steps, baseSteps, explainedTotal, onBarClick }:
       }
       const simRange: [number, number] = [Math.min(start, end), Math.max(start, end)];
 
+      // Trecho já explicado da coluna "Não Explicado": do fim do resíduo até
+      // onde a coluna original terminaria (resíduo + explicado).
+      const explainedMusd = (step as { explainedMusd?: number }).explainedMusd;
+      let explainedRange: [number, number] | undefined;
+      if (explainedMusd !== undefined && Math.abs(explainedMusd) > 1e-9 && !isTotal) {
+        const expStart = step.cumulative;
+        const expEnd = step.cumulative + explainedMusd;
+        explainedRange = [Math.min(expStart, expEnd), Math.max(expStart, expEnd)];
+      }
+
       // Chave 'ebitda_target' equivale nas duas séries (rótulo difere).
       const base = baseByKey.get(step.key);
       let baseRange: [number, number] = simRange;
@@ -278,13 +330,18 @@ export function WaterfallChart({ steps, baseSteps, explainedTotal, onBarClick }:
           baseRange = [chartMin, base.value];
         }
       }
-      const range: [number, number] = compare
+      let range: [number, number] = compare
         ? [Math.min(simRange[0], baseRange[0]), Math.max(simRange[1], baseRange[1])]
         : simRange;
+      if (explainedRange) {
+        range = [Math.min(range[0], explainedRange[0]), Math.max(range[1], explainedRange[1])];
+      }
 
       return {
         ...step,
         range,
+        explainedRange,
+        explainedMusd,
         simRange,
         baseRange,
         baseValue,
