@@ -24,6 +24,46 @@ export interface BridgeExplanationList {
   explanations: BridgeExplanation[];
 }
 
+/**
+ * One line of a market explanation table (e.g. "Pellet premium"). Value fields are omitted when the source has no value for them (e.g. Forex/Others rows only carry the impact).
+ */
+export interface MarketExplanationLine {
+  id: number;
+  label: string;
+  /** Value in the source scenario (e.g. price $/t). */
+  sourceValue?: number;
+  /** Value in the target scenario. */
+  targetValue?: number;
+  /** Variation between target and source, as imported. */
+  varValue?: number;
+  /** Impacted volume in kt. */
+  volumeKt?: number;
+  /** Impact on the EBITDA variation, in MUSD ($m). */
+  impactMusd: number;
+}
+
+/**
+ * An imported market explanation table (e.g. Iron Ores) for a scenario pair, with its detail lines and the bridge items it impacts.
+ */
+export interface MarketExplanation {
+  id: number;
+  sourceId: string;
+  targetId: string;
+  /** Explanation title (e.g. Iron Ores). */
+  title: string;
+  /** Label of the value columns (e.g. "Price $/t"). */
+  unitLabel: string;
+  /** Sum of the line impacts in MUSD. */
+  totalMusd: number;
+  /** Labels of the bridge items impacted by this explanation (e.g. Fines, Pellets, Lumps). */
+  items: string[];
+  lines: MarketExplanationLine[];
+}
+
+export interface MarketExplanationList {
+  explanations: MarketExplanation[];
+}
+
 export interface CreateBridgeExplanation {
   sourceId: string;
   targetId: string;
@@ -334,6 +374,17 @@ target?: TargetScenarioParameter;
 };
 
 export type ListBridgeExplanationsParams = {
+/**
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
+ */
+source?: SourceScenarioParameter;
+/**
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
+ */
+target?: TargetScenarioParameter;
+};
+
+export type ListMarketExplanationsParams = {
 /**
  * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */

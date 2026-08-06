@@ -6,6 +6,9 @@ import {
   fixedCostFactsTable,
   inputPriceFactsTable,
   miscFactsTable,
+  marketExplanationsTable,
+  marketExplanationLinesTable,
+  marketExplanationItemsTable,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import seed from "../seed/bridge-seed.json";
@@ -30,9 +33,75 @@ function chunk<T>(rows: T[], size = 500): T[][] {
  */
 const SEED_LOCK_KEY = 764_211_003; // arbitrary app-wide advisory lock id
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Explicações de mercado (seções ausentes em seeds antigos são toleradas).
+// Os ids são preservados do dump para manter os vínculos linha/item.
+async function seedMarketExplanations(tx: Tx): Promise<void> {
+  for (const rows of chunk((seed as Record<string, unknown>).market_explanations as Row[] | undefined ?? [])) {
+    await tx.insert(marketExplanationsTable).values(
+      rows.map((r) => ({
+        id: num(r.id),
+        sourceId: String(r.source_id),
+        targetId: String(r.target_id),
+        title: String(r.title),
+        unitLabel: String(r.unit_label),
+        sortOrder: num(r.sort_order),
+      })),
+    );
+  }
+  for (const rows of chunk((seed as Record<string, unknown>).market_explanation_lines as Row[] | undefined ?? [])) {
+    await tx.insert(marketExplanationLinesTable).values(
+      rows.map((r) => ({
+        explanationId: num(r.explanation_id),
+        label: String(r.label),
+        sourceValue: numOrNull(r.source_value),
+        targetValue: numOrNull(r.target_value),
+        varValue: numOrNull(r.var_value),
+        volumeKt: numOrNull(r.volume_kt),
+        impactMusd: num(r.impact_musd),
+        sortOrder: num(r.sort_order),
+      })),
+    );
+  }
+  for (const rows of chunk((seed as Record<string, unknown>).market_explanation_items as Row[] | undefined ?? [])) {
+    await tx.insert(marketExplanationItemsTable).values(
+      rows.map((r) => ({
+        explanationId: num(r.explanation_id),
+        item: String(r.item),
+      })),
+    );
+  }
+  // Reserva os ids já usados pelo dump na sequência da tabela.
+  await tx.execute(sql`
+    SELECT setval(
+      pg_get_serial_sequence('market_explanations', 'id'),
+      (SELECT COALESCE(MAX(id), 0) + 1 FROM market_explanations),
+      false
+    )
+  `);
+}
+
 export async function seedIfEmpty(): Promise<void> {
   const existing = await db.select().from(scenariosTable).limit(1);
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    // Banco já semeado por uma versão anterior: garante o backfill das
+    // explicações de mercado (tabelas novas ficam vazias após o upgrade de
+    // schema; nunca sobrescreve dados já importados).
+    const hasMarket = await db.select().from(marketExplanationsTable).limit(1);
+    const seedHasMarket =
+      (((seed as Record<string, unknown>).market_explanations as Row[] | undefined) ?? []).length > 0;
+    if (hasMarket.length === 0 && seedHasMarket) {
+      logger.info("Backfill das explicações de mercado (seed)");
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
+        const check = await tx.select().from(marketExplanationsTable).limit(1);
+        if (check.length > 0) return;
+        await seedMarketExplanations(tx);
+      });
+    }
+    return;
+  }
 
   logger.info("Banco vazio — importando dados do bridge (seed)");
 
@@ -121,6 +190,7 @@ export async function seedIfEmpty(): Promise<void> {
         })),
       );
     }
+    await seedMarketExplanations(tx);
   });
 
   logger.info("Seed do bridge concluído");

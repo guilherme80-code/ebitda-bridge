@@ -248,3 +248,34 @@ export const DeleteBridgeExplanationParams = zod.object({
 export const DeleteBridgeExplanationResponse = zod.void()
 
 
+/**
+ * Returns the imported market explanation tables for the source/target pair, each with its detail lines (source/target values, variation, volume, $m impact) and the list of impacted bridge items (e.g. Fines, Pellets, Lumps).
+ * @summary List market explanations (e.g. Iron Ores) for a scenario pair
+ */
+export const ListMarketExplanationsQueryParams = zod.object({
+  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the first version with imported data.'),
+  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the most recent version with imported data.')
+})
+
+export const ListMarketExplanationsResponse = zod.object({
+  "explanations": zod.array(zod.object({
+  "id": zod.number(),
+  "sourceId": zod.string(),
+  "targetId": zod.string(),
+  "title": zod.string().describe('Explanation title (e.g. Iron Ores).'),
+  "unitLabel": zod.string().describe('Label of the value columns (e.g. \"Price $\/t\").'),
+  "totalMusd": zod.number().describe('Sum of the line impacts in MUSD.'),
+  "items": zod.array(zod.string()).describe('Labels of the bridge items impacted by this explanation (e.g. Fines, Pellets, Lumps).'),
+  "lines": zod.array(zod.object({
+  "id": zod.number(),
+  "label": zod.string(),
+  "sourceValue": zod.number().optional().describe('Value in the source scenario (e.g. price $\/t).'),
+  "targetValue": zod.number().optional().describe('Value in the target scenario.'),
+  "varValue": zod.number().optional().describe('Variation between target and source, as imported.'),
+  "volumeKt": zod.number().optional().describe('Impacted volume in kt.'),
+  "impactMusd": zod.number().describe('Impact on the EBITDA variation, in MUSD ($m).')
+}).describe('One line of a market explanation table (e.g. \"Pellet premium\"). Value fields are omitted when the source has no value for them (e.g. Forex\/Others rows only carry the impact).'))
+}).describe('An imported market explanation table (e.g. Iron Ores) for a scenario pair, with its detail lines and the bridge items it impacts.'))
+})
+
+

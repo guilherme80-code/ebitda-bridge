@@ -4,8 +4,7 @@ import {
   type GetBridgeTablesParams,
   type SimulatedBridgeTable,
 } from '@workspace/api-client-react';
-import { ChevronRight } from 'lucide-react';
-import { Table2 } from 'lucide-react';
+import { ChevronRight, Info, Table2 } from 'lucide-react';
 import { useState } from 'react';
 
 const nf = new Intl.NumberFormat('pt-BR', {
@@ -24,9 +23,19 @@ interface Props {
   enabled: boolean;
   /** Tabelas simuladas (com valores originais e células ajustadas). */
   simulatedTables?: SimulatedBridgeTable[];
+  /** Itens com explicação de mercado vinculada (rótulos normalizados). */
+  hasMarketExplanation?: (label: string) => boolean;
+  /** Clique em um item vinculado abre o pop-up da explicação. */
+  onMarketItemClick?: (label: string) => void;
 }
 
-export function DetailedTables({ params, enabled, simulatedTables }: Props) {
+export function DetailedTables({
+  params,
+  enabled,
+  simulatedTables,
+  hasMarketExplanation,
+  onMarketItemClick,
+}: Props) {
   const { data, isLoading, isError } = useGetBridgeTables(params, {
     query: { enabled, queryKey: getGetBridgeTablesQueryKey(params) },
   });
@@ -136,7 +145,23 @@ export function DetailedTables({ params, enabled, simulatedTables }: Props) {
                           />
                         )}
                         {isGroupDetail && <span className="inline-block w-5" />}
-                        {row.label}
+                        {row.kind === 'row' && hasMarketExplanation?.(row.label) && onMarketItemClick ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onMarketItemClick(row.label);
+                            }}
+                            className="inline-flex items-center gap-1.5 font-semibold text-brand-blue hover:underline underline-offset-2 cursor-pointer"
+                            title="Ver explicação de mercado"
+                            data-testid={`button-market-item-${table.key}-${i}`}
+                          >
+                            {row.label}
+                            <Info className="w-3.5 h-3.5 opacity-70" />
+                          </button>
+                        ) : (
+                          row.label
+                        )}
                         {rowChanged && row.kind === 'row' && (
                           <span className="ml-2 align-middle text-[9px] font-bold uppercase tracking-widest text-brand-blue bg-blue-100/80 px-1.5 py-0.5 border border-brand-blue/10">
                             Ajustado

@@ -3,10 +3,13 @@ import {
   useGetBridgeSummary,
   useListScenarios,
   useListBridgeExplanations,
+  useListMarketExplanations,
   getGetBridgeQueryKey,
   getGetBridgeSummaryQueryKey,
   getListBridgeExplanationsQueryKey,
+  getListMarketExplanationsQueryKey,
 } from '@workspace/api-client-react';
+import type { MarketExplanation } from '@workspace/api-client-react';
 import { WaterfallChart } from '../components/WaterfallChart';
 import { SummaryCards } from '../components/SummaryCards';
 import { DrillDownDrawer } from '../components/DrillDownDrawer';
@@ -15,8 +18,9 @@ import { ScenarioSimulator } from '../components/ScenarioSimulator';
 import type { SimulateBridgeResponse } from '@workspace/api-client-react';
 import { ScenarioSelector } from '../components/ScenarioSelector';
 import { ExplanationsPanel } from '../components/ExplanationsPanel';
+import { MarketExplanationDialog } from '../components/MarketExplanationDialog';
 import { discrepancyOf } from '../lib/unexplained';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import logoUrl from "@assets/brand/arcelormittal-logo-white.svg";
 
@@ -63,6 +67,37 @@ export default function Dashboard() {
 
   const [selectedComponent, setSelectedComponent] = useState<{key: string, label: string} | null>(null);
   const [simulation, setSimulation] = useState<SimulateBridgeResponse | null>(null);
+
+  // Explicações de mercado (ex.: Iron Ores) importadas para o par — itens
+  // vinculados (ex.: Fines, Pellets, Lumps) abrem um pop-up com a tabela.
+  const { data: marketData } = useListMarketExplanations(params, {
+    query: { enabled: pairAvailable, queryKey: getListMarketExplanationsQueryKey(params) },
+  });
+  const marketByItem = useMemo(() => {
+    const map = new Map<string, MarketExplanation>();
+    for (const exp of marketData?.explanations ?? []) {
+      for (const item of exp.items) {
+        const k = item.trim().toLowerCase();
+        if (!map.has(k)) map.set(k, exp);
+      }
+    }
+    return map;
+  }, [marketData]);
+  const hasMarketExplanation = useCallback(
+    (label: string) => marketByItem.has(label.trim().toLowerCase()),
+    [marketByItem],
+  );
+  const [marketPopup, setMarketPopup] = useState<{
+    explanation: MarketExplanation;
+    itemLabel: string;
+  } | null>(null);
+  const openMarketItem = useCallback(
+    (label: string) => {
+      const exp = marketByItem.get(label.trim().toLowerCase());
+      if (exp) setMarketPopup({ explanation: exp, itemLabel: label });
+    },
+    [marketByItem],
+  );
 
   const isLoading = loadingCatalog || (pairSelected && (loadingBridge || loadingSummary));
   const isError = errorCatalog || errorBridge || errorSummary;
@@ -219,7 +254,13 @@ export default function Dashboard() {
         )}
 
         {!isLoading && !isError && bridge && (
-          <DetailedTables params={params} enabled={pairAvailable} simulatedTables={simulation?.tables} />
+          <DetailedTables
+            params={params}
+            enabled={pairAvailable}
+            simulatedTables={simulation?.tables}
+            hasMarketExplanation={hasMarketExplanation}
+            onMarketItemClick={openMarketItem}
+          />
         )}
       </div>
 
@@ -229,6 +270,16 @@ export default function Dashboard() {
         source={sourceId ?? undefined}
         target={targetId ?? undefined}
         onClose={() => setSelectedComponent(null)}
+        hasMarketExplanation={hasMarketExplanation}
+        onMarketItemClick={openMarketItem}
+      />
+
+      <MarketExplanationDialog
+        explanation={marketPopup?.explanation ?? null}
+        itemLabel={marketPopup?.itemLabel ?? null}
+        sourceLabel={sourceScenario?.label}
+        targetLabel={targetScenario?.label}
+        onClose={() => setMarketPopup(null)}
       />
     </div>
   )

@@ -168,6 +168,66 @@ export const bridgeExplanationsTable = pgTable("bridge_explanations", {
     .defaultNow(),
 });
 
+// Market explanations: reference tables (e.g. Iron Ores) imported from a
+// separate source, scoped to a source/target scenario pair. Each explanation
+// has detail lines (price source/target, variation, volume, $m impact) and a
+// list of impacted bridge items (e.g. Fines, Pellets, Lumps) that open the
+// explanation pop-up when clicked.
+export const marketExplanationsTable = pgTable("market_explanations", {
+  id: serial("id").primaryKey(),
+  sourceId: text("source_id").notNull(),
+  targetId: text("target_id").notNull(),
+  title: text("title").notNull(), // e.g. "Iron Ores"
+  unitLabel: text("unit_label").notNull().default("Price $/t"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const marketExplanationLinesTable = pgTable("market_explanation_lines", {
+  id: serial("id").primaryKey(),
+  explanationId: integer("explanation_id")
+    .notNull()
+    .references(() => marketExplanationsTable.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  sourceValue: doublePrecision("source_value"),
+  targetValue: doublePrecision("target_value"),
+  varValue: doublePrecision("var_value"),
+  volumeKt: doublePrecision("volume_kt"),
+  impactMusd: doublePrecision("impact_musd").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const marketExplanationItemsTable = pgTable("market_explanation_items", {
+  id: serial("id").primaryKey(),
+  explanationId: integer("explanation_id")
+    .notNull()
+    .references(() => marketExplanationsTable.id, { onDelete: "cascade" }),
+  item: text("item").notNull(), // label of the impacted bridge item
+});
+
+export const insertMarketExplanationSchema = createInsertSchema(
+  marketExplanationsTable,
+).omit({ id: true });
+export type InsertMarketExplanation = z.infer<typeof insertMarketExplanationSchema>;
+export type MarketExplanation = typeof marketExplanationsTable.$inferSelect;
+
+export const insertMarketExplanationLineSchema = createInsertSchema(
+  marketExplanationLinesTable,
+).omit({ id: true });
+export type InsertMarketExplanationLine = z.infer<
+  typeof insertMarketExplanationLineSchema
+>;
+export type MarketExplanationLine =
+  typeof marketExplanationLinesTable.$inferSelect;
+
+export const insertMarketExplanationItemSchema = createInsertSchema(
+  marketExplanationItemsTable,
+).omit({ id: true });
+export type InsertMarketExplanationItem = z.infer<
+  typeof insertMarketExplanationItemSchema
+>;
+export type MarketExplanationItem =
+  typeof marketExplanationItemsTable.$inferSelect;
+
 export const insertBridgeExplanationSchema = createInsertSchema(
   bridgeExplanationsTable,
 ).omit({ id: true, createdAt: true });

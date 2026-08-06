@@ -1,21 +1,27 @@
 import { useGetBridgeComponent, getGetBridgeComponentQueryKey } from '@workspace/api-client-react';
-import { X, Layers, Loader2 } from 'lucide-react';
+import { X, Layers, Loader2, Info } from 'lucide-react';
 import { formatMUSD, cn } from '../lib/utils';
 import { useMemo, useEffect, useState } from 'react';
 import type { BridgeDetailLine } from '@workspace/api-client-react';
 
-export function DrillDownDrawer({ 
-  componentKey, 
+export function DrillDownDrawer({
+  componentKey,
   title,
   source,
   target,
-  onClose 
-}: { 
-  componentKey: string | null; 
+  onClose,
+  hasMarketExplanation,
+  onMarketItemClick,
+}: {
+  componentKey: string | null;
   title: string;
   source?: string;
   target?: string;
-  onClose: () => void; 
+  onClose: () => void;
+  /** Itens com explicação de mercado vinculada (rótulos normalizados). */
+  hasMarketExplanation?: (label: string) => boolean;
+  /** Clique em um item vinculado abre o pop-up da explicação. */
+  onMarketItemClick?: (label: string) => void;
 }) {
   const params = source && target ? { source, target } : undefined;
   const { data, isLoading, isError } = useGetBridgeComponent(
@@ -122,9 +128,22 @@ export function DrillDownDrawer({
                     <div className="space-y-1">
                       {lines.map((line) => (
                         <div key={line.id} className="flex justify-between items-center py-2.5 px-3 hover:bg-slate-50 rounded-lg transition-colors group">
-                          <span className="text-[13px] font-semibold text-slate-600 group-hover:text-slate-900 transition-colors">
-                            {line.label}
-                          </span>
+                          {hasMarketExplanation?.(line.label) && onMarketItemClick ? (
+                            <button
+                              type="button"
+                              onClick={() => onMarketItemClick(line.label)}
+                              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-blue hover:underline underline-offset-2 cursor-pointer"
+                              title="Ver explicação de mercado"
+                              data-testid={`button-market-line-${line.id}`}
+                            >
+                              {line.label}
+                              <Info className="w-3.5 h-3.5 opacity-70" />
+                            </button>
+                          ) : (
+                            <span className="text-[13px] font-semibold text-slate-600 group-hover:text-slate-900 transition-colors">
+                              {line.label}
+                            </span>
+                          )}
                           <span className={cn(
                             "text-sm font-bold font-mono",
                             line.value > 0 ? "text-emerald-600" : "text-rose-600"

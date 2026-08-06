@@ -34,6 +34,8 @@ import type {
   GetBridgeTablesParams,
   HealthStatus,
   ListBridgeExplanationsParams,
+  ListMarketExplanationsParams,
+  MarketExplanationList,
   ScenarioCatalog,
   SimulateBridgeBody,
   SimulateBridgeParams,
@@ -874,4 +876,89 @@ export const useDeleteBridgeExplanation = <TError = ErrorType<ErrorMessage>,
       > => {
       return useMutation(getDeleteBridgeExplanationMutationOptions(options));
     }
+
+export const getListMarketExplanationsUrl = (params?: ListMarketExplanationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bridge/market-explanations?${stringifiedParams}` : `/api/bridge/market-explanations`
+}
+
+/**
+ * Returns the imported market explanation tables for the source/target pair, each with its detail lines (source/target values, variation, volume, $m impact) and the list of impacted bridge items (e.g. Fines, Pellets, Lumps).
+ * @summary List market explanations (e.g. Iron Ores) for a scenario pair
+ */
+export const listMarketExplanations = async (params?: ListMarketExplanationsParams, options?: Parameters<typeof customFetch>[1]): Promise<MarketExplanationList> => {
+
+  return customFetch<MarketExplanationList>(getListMarketExplanationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMarketExplanationsQueryKey = (params?: ListMarketExplanationsParams,) => {
+    return [
+    `/api/bridge/market-explanations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListMarketExplanationsQueryOptions = <TData = Awaited<ReturnType<typeof listMarketExplanations>>, TError = ErrorType<ErrorMessage>>(params?: ListMarketExplanationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMarketExplanations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMarketExplanationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMarketExplanations>>> = ({ signal }) => listMarketExplanations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMarketExplanations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMarketExplanationsQueryResult = NonNullable<Awaited<ReturnType<typeof listMarketExplanations>>>
+export type ListMarketExplanationsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary List market explanations (e.g. Iron Ores) for a scenario pair
+ */
+
+export function useListMarketExplanations<TData = Awaited<ReturnType<typeof listMarketExplanations>>, TError = ErrorType<ErrorMessage>>(
+ params?: ListMarketExplanationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMarketExplanations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMarketExplanationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
