@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aggregateMonths, deriveScenarios } from "./aggregate";
+import { aggregateMonths, deriveScenarios, monthPeriodLabel } from "./aggregate";
 import type { RawScenarioData } from "./bridge-calc";
 import type { Scenario } from "@workspace/db";
 
@@ -226,5 +226,29 @@ describe("deriveScenarios", () => {
       "fy26_m11_budget",
       "fy26_m12_budget",
     ]);
+  });
+
+  it("emite trimestres totalmente ausentes do catálogo (zero meses) com os meses esperados", () => {
+    // Só JAN..MAR no catálogo: Q2..Q4 não têm nenhum mês, mas continuam
+    // aparecendo — monthIds traz os meses ESPERADOS, e o catálogo os marca
+    // como sem dados listando os faltantes via monthPeriodLabel.
+    const months = Array.from({ length: 3 }, (_, i) => mk(i + 1, 1, "actual", "Actual"));
+    const derived = deriveScenarios(months);
+    expect(derived.map((d) => d.id)).toEqual([
+      "fy26_fy_actual",
+      "fy26_q1_actual",
+      "fy26_q2_actual",
+      "fy26_q3_actual",
+      "fy26_q4_actual",
+    ]);
+    const q3 = derived.find((d) => d.id === "fy26_q3_actual")!;
+    expect(q3.monthIds).toEqual(["fy26_m07_actual", "fy26_m08_actual", "fy26_m09_actual"]);
+    expect(q3.monthIds.map(monthPeriodLabel)).toEqual(["JUL26", "AUG26", "SEP26"]);
+  });
+
+  it("monthPeriodLabel converte id mensal em período (e devolve o id quando não reconhece)", () => {
+    expect(monthPeriodLabel("fy26_m02_budget")).toBe("FEB26");
+    expect(monthPeriodLabel("fy26_m12_mrf7")).toBe("DEC26");
+    expect(monthPeriodLabel("algo_estranho")).toBe("algo_estranho");
   });
 });

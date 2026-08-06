@@ -11,5 +11,6 @@ The data source (sheet/Databricks) carries only monthly rows (JAN26..DEC26) per 
 
 **How to apply:**
 - Derived FY/Q keep the legacy ids (`fy26_fy_budget`, `fy26_q1_mrf3`) so URLs/default pair stay stable; a derived scenario has data only when ALL its months have data.
+- Derived FY/Q are ALWAYS emitted (monthIds = all expected month ids, even absent ones); the catalog computes `missingMonths` for derived without data so the UI shows them disabled with the missing months listed — never let incomplete derived gain `hasData` or reach bridge computation.
 - Cross-month classification of an item (sales currency/domestic, fixed USD flag, input priced vs direct amount) must be identical in all months — import rejects conflicts and aggregation throws as second defense. Never make aggregation "pick the first month".
 - Tests build FY via `loadDerived()` in seed-fixture; FY driver values coincide with the old Excel reference because months sum to FY. Keep the numeric driver regression, not only plug-based closure (the stock plug always closes the bridge).
