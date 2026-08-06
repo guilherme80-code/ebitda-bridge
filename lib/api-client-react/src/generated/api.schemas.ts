@@ -6,6 +6,33 @@
  * OpenAPI spec version: 0.1.0
  */
 /**
+ * A user-entered explanation of the EBITDA variation between a source and target scenario.
+ */
+export interface BridgeExplanation {
+  id: number;
+  sourceId: string;
+  targetId: string;
+  /** Portion of the variation explained, in MUSD. */
+  valueMusd: number;
+  /** Free-text explanation entered by the user. */
+  text: string;
+  /** ISO timestamp of when the explanation was saved. */
+  createdAt: string;
+}
+
+export interface BridgeExplanationList {
+  explanations: BridgeExplanation[];
+}
+
+export interface CreateBridgeExplanation {
+  sourceId: string;
+  targetId: string;
+  valueMusd: number;
+  /** @minLength 1 */
+  text: string;
+}
+
+/**
  * Granularity of the period. Only scenarios of the same kind can be compared (year vs year, quarter vs quarter, month vs month).
  */
 export type ScenarioPeriodKind = typeof ScenarioPeriodKind[keyof typeof ScenarioPeriodKind];
@@ -296,6 +323,17 @@ target?: TargetScenarioParameter;
 };
 
 export type GetBridgeSummaryParams = {
+/**
+ * Source scenario id (version + period of origin). Defaults to the first version with imported data.
+ */
+source?: SourceScenarioParameter;
+/**
+ * Target scenario id (version + period of destination). Defaults to the most recent version with imported data.
+ */
+target?: TargetScenarioParameter;
+};
+
+export type ListBridgeExplanationsParams = {
 /**
  * Source scenario id (version + period of origin). Defaults to the first version with imported data.
  */

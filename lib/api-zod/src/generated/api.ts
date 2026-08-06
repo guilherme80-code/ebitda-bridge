@@ -194,3 +194,57 @@ export const GetBridgeSummaryResponse = zod.object({
 })
 
 
+/**
+ * Returns the explanations (value + text) entered by users for the variation between the source and target scenarios, newest first.
+ * @summary List saved explanations of the EBITDA variation for a scenario pair
+ */
+export const ListBridgeExplanationsQueryParams = zod.object({
+  "source": zod.coerce.string().optional().describe('Source scenario id (version + period of origin). Defaults to the first version with imported data.'),
+  "target": zod.coerce.string().optional().describe('Target scenario id (version + period of destination). Defaults to the most recent version with imported data.')
+})
+
+export const ListBridgeExplanationsResponse = zod.object({
+  "explanations": zod.array(zod.object({
+  "id": zod.number(),
+  "sourceId": zod.string(),
+  "targetId": zod.string(),
+  "valueMusd": zod.number().describe('Portion of the variation explained, in MUSD.'),
+  "text": zod.string().describe('Free-text explanation entered by the user.'),
+  "createdAt": zod.string().describe('ISO timestamp of when the explanation was saved.')
+}).describe('A user-entered explanation of the EBITDA variation between a source and target scenario.'))
+})
+
+
+/**
+ * @summary Save an explanation of the EBITDA variation for a scenario pair
+ */
+
+
+
+export const CreateBridgeExplanationBody = zod.object({
+  "sourceId": zod.string(),
+  "targetId": zod.string(),
+  "valueMusd": zod.number(),
+  "text": zod.string().min(1)
+})
+
+export const CreateBridgeExplanationResponse = zod.object({
+  "id": zod.number(),
+  "sourceId": zod.string(),
+  "targetId": zod.string(),
+  "valueMusd": zod.number().describe('Portion of the variation explained, in MUSD.'),
+  "text": zod.string().describe('Free-text explanation entered by the user.'),
+  "createdAt": zod.string().describe('ISO timestamp of when the explanation was saved.')
+}).describe('A user-entered explanation of the EBITDA variation between a source and target scenario.')
+
+
+/**
+ * @summary Delete a saved explanation
+ */
+export const DeleteBridgeExplanationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteBridgeExplanationResponse = zod.void()
+
+

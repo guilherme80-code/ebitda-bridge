@@ -22,14 +22,18 @@ import type {
 import type {
   Bridge,
   BridgeComponentDetail,
+  BridgeExplanation,
+  BridgeExplanationList,
   BridgeSummary,
   BridgeTables,
+  CreateBridgeExplanation,
   ErrorMessage,
   GetBridgeComponentParams,
   GetBridgeParams,
   GetBridgeSummaryParams,
   GetBridgeTablesParams,
   HealthStatus,
+  ListBridgeExplanationsParams,
   ScenarioCatalog,
   SimulateBridgeBody,
   SimulateBridgeParams,
@@ -643,4 +647,231 @@ export function useGetBridgeSummary<TData = Awaited<ReturnType<typeof getBridgeS
 
 
 
+
+export const getListBridgeExplanationsUrl = (params?: ListBridgeExplanationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bridge/explanations?${stringifiedParams}` : `/api/bridge/explanations`
+}
+
+/**
+ * Returns the explanations (value + text) entered by users for the variation between the source and target scenarios, newest first.
+ * @summary List saved explanations of the EBITDA variation for a scenario pair
+ */
+export const listBridgeExplanations = async (params?: ListBridgeExplanationsParams, options?: Parameters<typeof customFetch>[1]): Promise<BridgeExplanationList> => {
+
+  return customFetch<BridgeExplanationList>(getListBridgeExplanationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBridgeExplanationsQueryKey = (params?: ListBridgeExplanationsParams,) => {
+    return [
+    `/api/bridge/explanations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBridgeExplanationsQueryOptions = <TData = Awaited<ReturnType<typeof listBridgeExplanations>>, TError = ErrorType<ErrorMessage>>(params?: ListBridgeExplanationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBridgeExplanations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBridgeExplanationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBridgeExplanations>>> = ({ signal }) => listBridgeExplanations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBridgeExplanations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBridgeExplanationsQueryResult = NonNullable<Awaited<ReturnType<typeof listBridgeExplanations>>>
+export type ListBridgeExplanationsQueryError = ErrorType<ErrorMessage>
+
+
+/**
+ * @summary List saved explanations of the EBITDA variation for a scenario pair
+ */
+
+export function useListBridgeExplanations<TData = Awaited<ReturnType<typeof listBridgeExplanations>>, TError = ErrorType<ErrorMessage>>(
+ params?: ListBridgeExplanationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBridgeExplanations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBridgeExplanationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateBridgeExplanationUrl = () => {
+
+
+
+
+  return `/api/bridge/explanations`
+}
+
+/**
+ * @summary Save an explanation of the EBITDA variation for a scenario pair
+ */
+export const createBridgeExplanation = async (createBridgeExplanation: CreateBridgeExplanation, options?: Parameters<typeof customFetch>[1]): Promise<BridgeExplanation> => {
+
+  return customFetch<BridgeExplanation>(getCreateBridgeExplanationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createBridgeExplanation)
+  }
+);}
+
+
+
+
+
+export const getCreateBridgeExplanationMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBridgeExplanation>>, TError,{data: BodyType<CreateBridgeExplanation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createBridgeExplanation>>, TError,{data: BodyType<CreateBridgeExplanation>}, TContext> => {
+
+const mutationKey = ['createBridgeExplanation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBridgeExplanation>>, {data: BodyType<CreateBridgeExplanation>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createBridgeExplanation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateBridgeExplanationMutationResult = NonNullable<Awaited<ReturnType<typeof createBridgeExplanation>>>
+    export type CreateBridgeExplanationMutationBody = BodyType<CreateBridgeExplanation>
+    export type CreateBridgeExplanationMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Save an explanation of the EBITDA variation for a scenario pair
+ */
+export const useCreateBridgeExplanation = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBridgeExplanation>>, TError,{data: BodyType<CreateBridgeExplanation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createBridgeExplanation>>,
+        TError,
+        {data: BodyType<CreateBridgeExplanation>},
+        TContext
+      > => {
+      return useMutation(getCreateBridgeExplanationMutationOptions(options));
+    }
+
+export const getDeleteBridgeExplanationUrl = (id: number,) => {
+
+
+
+
+  return `/api/bridge/explanations/${id}`
+}
+
+/**
+ * @summary Delete a saved explanation
+ */
+export const deleteBridgeExplanation = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteBridgeExplanationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteBridgeExplanationMutationOptions = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBridgeExplanation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteBridgeExplanation>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteBridgeExplanation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteBridgeExplanation>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteBridgeExplanation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteBridgeExplanationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteBridgeExplanation>>>
+
+    export type DeleteBridgeExplanationMutationError = ErrorType<ErrorMessage>
+
+    /**
+ * @summary Delete a saved explanation
+ */
+export const useDeleteBridgeExplanation = <TError = ErrorType<ErrorMessage>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBridgeExplanation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteBridgeExplanation>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteBridgeExplanationMutationOptions(options));
+    }
 

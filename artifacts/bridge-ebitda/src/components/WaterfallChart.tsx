@@ -213,7 +213,27 @@ export function WaterfallChart({ steps, baseSteps, onBarClick }: WaterfallChartP
   const chartData = useMemo(() => {
     if (!steps || steps.length === 0) return [];
     const compare = !!baseSteps && baseSteps.length > 0;
-    const baseByKey = new Map((baseSteps ?? []).map((s) => [s.key, s]));
+
+    // Última coluna: variação total entre EBITDA origem e destino.
+    const withVariation = (list: BridgeStep[]): BridgeStep[] => {
+      const start = list.find((s) => s.kind === 'total_start');
+      const end = [...list].reverse().find((s) => s.kind === 'total_end');
+      if (!start || !end) return list;
+      return [
+        ...list,
+        {
+          key: 'total_variation',
+          label: 'Variação Total',
+          value: end.value - start.value,
+          cumulative: end.value,
+          kind: 'delta',
+          hasDetail: false,
+        },
+      ];
+    };
+    const steps_ = withVariation(steps);
+    const baseSteps_ = baseSteps ? withVariation(baseSteps) : baseSteps;
+    const baseByKey = new Map((baseSteps_ ?? []).map((s) => [s.key, s]));
 
     const stepRange = (s: BridgeStep): [number, number] => {
       const isTotal = s.kind !== 'delta';
@@ -223,7 +243,7 @@ export function WaterfallChart({ steps, baseSteps, onBarClick }: WaterfallChartP
     };
 
     // Find min/max for Y axis (inclui a série original quando em comparação)
-    const allSteps = compare ? [...steps, ...(baseSteps ?? [])] : steps;
+    const allSteps = compare ? [...steps_, ...(baseSteps_ ?? [])] : steps_;
     const yVals = allSteps.flatMap(s =>
       s.kind === 'delta' ? [s.cumulative, s.cumulative - s.value] : [s.value],
     );
@@ -233,7 +253,7 @@ export function WaterfallChart({ steps, baseSteps, onBarClick }: WaterfallChartP
     const chartMin = Math.max(0, Math.floor(yMin - padding));
     const chartMax = Math.ceil(yMax + padding);
 
-    return steps.map(step => {
+    return steps_.map(step => {
       const isTotal = step.kind === 'total_start' || step.kind === 'total_end';
       let start, end;
       if (isTotal) {

@@ -49,7 +49,7 @@ function firstStr(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
-async function loadCatalog() {
+export async function loadCatalog() {
   const [scenarios, withParams, withSales] = await Promise.all([
     db.select().from(scenariosTable).orderBy(asc(scenariosTable.sortOrder)),
     db

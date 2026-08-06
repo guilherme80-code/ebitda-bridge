@@ -184,6 +184,71 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /bridge/explanations:
+    get:
+      operationId: listBridgeExplanations
+      tags: [bridge]
+      summary: List saved explanations of the EBITDA variation for a scenario pair
+      description: Returns the explanations (value + text) entered by users for the variation between the source and target scenarios, newest first.
+      parameters:
+        - $ref: "#/components/parameters/SourceScenario"
+        - $ref: "#/components/parameters/TargetScenario"
+      responses:
+        "200":
+          description: Explanations for the pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeExplanationList"
+        "400":
+          description: Missing source or target scenario id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      operationId: createBridgeExplanation
+      tags: [bridge]
+      summary: Save an explanation of the EBITDA variation for a scenario pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBridgeExplanation"
+      responses:
+        "201":
+          description: Explanation saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeExplanation"
+        "400":
+          description: Invalid body or unknown scenario ids
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /bridge/explanations/{id}:
+    delete:
+      operationId: deleteBridgeExplanation
+      tags: [bridge]
+      summary: Delete a saved explanation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Explanation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
 components:
   parameters:
     SourceScenario:
@@ -201,6 +266,47 @@ components:
       schema:
         type: string
   schemas:
+    BridgeExplanation:
+      type: object
+      description: A user-entered explanation of the EBITDA variation between a source and target scenario.
+      properties:
+        id:
+          type: number
+        sourceId:
+          type: string
+        targetId:
+          type: string
+        valueMusd:
+          type: number
+          description: Portion of the variation explained, in MUSD.
+        text:
+          type: string
+          description: Free-text explanation entered by the user.
+        createdAt:
+          type: string
+          description: ISO timestamp of when the explanation was saved.
+      required: [id, sourceId, targetId, valueMusd, text, createdAt]
+    BridgeExplanationList:
+      type: object
+      properties:
+        explanations:
+          type: array
+          items:
+            $ref: "#/components/schemas/BridgeExplanation"
+      required: [explanations]
+    CreateBridgeExplanation:
+      type: object
+      properties:
+        sourceId:
+          type: string
+        targetId:
+          type: string
+        valueMusd:
+          type: number
+        text:
+          type: string
+          minLength: 1
+      required: [sourceId, targetId, valueMusd, text]
     Scenario:
       type: object
       description: A scenario is a combination of version (e.g. Budget, MRF7) and period (e.g. FY26).

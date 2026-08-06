@@ -12,6 +12,7 @@ import { DetailedTables } from '../components/DetailedTables';
 import { ScenarioSimulator } from '../components/ScenarioSimulator';
 import type { SimulateBridgeResponse } from '@workspace/api-client-react';
 import { ScenarioSelector } from '../components/ScenarioSelector';
+import { ExplanationsPanel } from '../components/ExplanationsPanel';
 import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import logoUrl from "@assets/brand/arcelormittal-logo-white.svg";
@@ -171,6 +172,15 @@ export default function Dashboard() {
               />
             </div>
           </main>
+        )}
+
+        {!isLoading && !isError && bridge && (
+          <ExplanationsPanel
+            sourceId={sourceId}
+            targetId={targetId}
+            enabled={pairAvailable}
+            variation={summary ? summary.endValue - summary.startValue : undefined}
+          />
         )}
 
         {!isLoading && !isError && bridge && (
