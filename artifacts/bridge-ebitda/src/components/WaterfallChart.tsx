@@ -178,7 +178,7 @@ const CustomTooltip = ({ active, payload }: any) => {
             {data.label}
             {data.changedStep && (
               <span className="ml-2 align-middle text-[9px] font-bold uppercase tracking-widest text-brand-blue bg-blue-50 px-1.5 py-0.5 border border-brand-blue/20">
-                Ajustado
+                Adjusted
               </span>
             )}
           </p>
@@ -189,7 +189,7 @@ const CustomTooltip = ({ active, payload }: any) => {
             </span>
           </div>
           <div className="flex justify-between items-center text-sm mb-1.5">
-            <span className="text-slate-500 font-medium">Simulado</span>
+            <span className="text-slate-500 font-medium">Simulated</span>
             <span className={cn(
               "font-bold font-mono",
               data.isTotal ? "text-slate-800" : data.value > 0 ? "text-emerald-600" : "text-rose-600"
@@ -199,7 +199,7 @@ const CustomTooltip = ({ active, payload }: any) => {
           </div>
           {Math.abs(delta) > CHANGE_EPS && (
             <div className="flex justify-between items-center text-sm">
-              <span className="text-slate-500 font-medium">Δ Simulação</span>
+              <span className="text-slate-500 font-medium">Δ Simulation</span>
               <span className="font-bold text-brand-blue font-mono">
                 {delta > 0 ? '+' : ''}{formatMUSD(delta)} MUSD
               </span>
@@ -208,13 +208,13 @@ const CustomTooltip = ({ active, payload }: any) => {
           {data.explainedMusd !== undefined && Math.abs(data.explainedMusd) > 1e-9 && (
             <>
               <div className="flex justify-between items-center text-sm mt-1.5">
-                <span className="text-slate-500 font-medium">Valor da fonte</span>
+                <span className="text-slate-500 font-medium">Source value</span>
                 <span className="font-bold text-slate-700 font-mono">
                   {data.value - data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.value - data.explainedMusd)} MUSD
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500 font-medium">Explicado (painel)</span>
+                <span className="text-slate-500 font-medium">Explained (panel)</span>
                 <span className="font-bold text-slate-700 font-mono">
                   {data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.explainedMusd)} MUSD
                 </span>
@@ -228,7 +228,7 @@ const CustomTooltip = ({ active, payload }: any) => {
       <div className="bg-white border border-slate-200 shadow-xl p-4 min-w-[220px]">
         <p className="font-bold text-slate-800 text-sm mb-3 pb-2 border-b border-slate-100 font-heading">{data.label}</p>
         <div className="flex justify-between items-center text-sm mb-1.5">
-          <span className="text-slate-500 font-medium">Impacto</span>
+          <span className="text-slate-500 font-medium">Impact</span>
           <span className={cn(
             "font-bold font-mono",
             data.isTotal ? "text-slate-800" : data.value > 0 ? "text-emerald-600" : "text-rose-600"
@@ -238,19 +238,19 @@ const CustomTooltip = ({ active, payload }: any) => {
         </div>
         {data.key === 'unexplained' && (
           <p className="text-[11px] text-slate-400 font-medium mb-1.5">
-            Parte da variação ainda sem explicação registrada no painel abaixo.
+            Part of the variance still without a recorded explanation in the panel below.
           </p>
         )}
         {data.explainedMusd !== undefined && Math.abs(data.explainedMusd) > 1e-9 && (
           <>
             <div className="flex justify-between items-center text-sm mb-1.5">
-              <span className="text-slate-500 font-medium">Valor da fonte</span>
+              <span className="text-slate-500 font-medium">Source value</span>
               <span className="font-bold text-slate-700 font-mono">
                 {data.value - data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.value - data.explainedMusd)} MUSD
               </span>
             </div>
             <div className="flex justify-between items-center text-sm mb-1.5">
-              <span className="text-slate-500 font-medium">Explicado (painel)</span>
+              <span className="text-slate-500 font-medium">Explained (panel)</span>
               <span className="font-bold text-slate-700 font-mono">
                 {data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.explainedMusd)} MUSD
               </span>
@@ -259,13 +259,13 @@ const CustomTooltip = ({ active, payload }: any) => {
         )}
         {!data.isTotal && data.key !== 'unexplained' && (
           <div className="flex justify-between items-center text-sm">
-            <span className="text-slate-500 font-medium">Acumulado</span>
+            <span className="text-slate-500 font-medium">Cumulative</span>
             <span className="font-bold text-slate-800 font-mono">{formatMUSD(data.cumulative)} MUSD</span>
           </div>
         )}
         {data.hasDetail && (
           <div className="mt-4 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 font-bold p-2 rounded text-center">
-            Clique na barra para detalhes
+            Click the bar for details
           </div>
         )}
       </div>

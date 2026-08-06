@@ -19,7 +19,7 @@ function Router() {
         <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 font-medium">
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold text-slate-800">404</h1>
-            <p>Página não encontrada</p>
+            <p>Page not found</p>
           </div>
         </div>
       </Route>

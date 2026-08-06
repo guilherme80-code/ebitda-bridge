@@ -25,7 +25,7 @@ function bridgeDriverList(
  */
 const UNEXPLAINED_EPS = 0.05;
 const UNEXPLAINED_KEY = "unexplained";
-const UNEXPLAINED_LABEL = "Não Explicado";
+const UNEXPLAINED_LABEL = "Unexplained";
 
 function unexplainedStep(
   discrepancy: number,
@@ -79,9 +79,9 @@ const router: IRouter = Router();
 
 const UNIT = "MUSD";
 const NO_DATA_ERROR =
-  "Não há dados importados para a combinação de cenários selecionada";
+  "No imported data for the selected scenario combination";
 const KIND_MISMATCH_ERROR =
-  "Compare períodos do mesmo tipo: ano com ano, trimestre com trimestre ou mês com mês";
+  "Compare periods of the same kind: year with year, quarter with quarter, or month with month";
 
 function firstStr(v: unknown): string | undefined {
   if (Array.isArray(v)) v = v[0];
@@ -220,10 +220,10 @@ async function resolvePair(sourceId?: string, targetId?: string) {
 }
 
 function bridgeTitle(source: Scenario, target: Scenario) {
-  return `Bridge de EBITDA — ${source.label} vs ${target.label}`;
+  return `EBITDA Bridge — ${source.label} vs ${target.label}`;
 }
 
-/** Substitui os genéricos "origem"/"destino" dos rótulos de colunas pelos
+/** Substitui os genéricos "source"/"target" dos rótulos de colunas pelos
  * nomes dos cenários selecionados (ex.: "Qtd FY26 Budget (kt)"). */
 function scenarioColumns<T extends { key: string; label: string }>(
   columns: T[],
@@ -233,8 +233,8 @@ function scenarioColumns<T extends { key: string; label: string }>(
   return columns.map((c) => ({
     ...c,
     label: c.label
-      .replace(/\borigem\b/g, source.label)
-      .replace(/\bdestino\b/g, target.label),
+      .replace(/\bsource\b/g, source.label)
+      .replace(/\btarget\b/g, target.label),
   }));
 }
 
@@ -242,7 +242,7 @@ router.get("/scenarios", async (_req, res): Promise<void> => {
   const { scenarios, withData, derivedById } = await loadCatalog();
   const def = defaultPair(scenarios, withData);
   if (!def) {
-    res.status(404).json({ error: "Nenhum dado de cenário importado" });
+    res.status(404).json({ error: "No scenario data imported" });
     return;
   }
   res.json(
@@ -353,12 +353,12 @@ router.get("/bridge/components/:key", async (req, res): Promise<void> => {
     (d) => d.key === params.data.key,
   );
   if (!driver) {
-    res.status(404).json({ error: "Componente não encontrado" });
+    res.status(404).json({ error: "Component not found" });
     return;
   }
   const detail = pair.bridge.details[driver.key] ?? [];
   if (detail.length === 0) {
-    res.status(404).json({ error: "Componente não encontrado" });
+    res.status(404).json({ error: "Component not found" });
     return;
   }
 
@@ -394,7 +394,7 @@ const ADJUSTMENT_SCOPES = new Set([
 router.post("/bridge/simulate", async (req, res): Promise<void> => {
   const body = SimulateBridgeBody.safeParse(req.body);
   if (!body.success) {
-    res.status(400).json({ error: "Informe um prompt de simulação." });
+    res.status(400).json({ error: "Provide a simulation prompt." });
     return;
   }
 
@@ -414,28 +414,28 @@ router.post("/bridge/simulate", async (req, res): Promise<void> => {
   const { rawSource, rawTarget } = pair;
   const catalog = buildCatalog(rawSource, rawTarget);
 
-  const system = `Você interpreta instruções de simulação ("what-if") de um bridge de EBITDA de uma siderúrgica e responde APENAS com JSON válido.
+  const system = `You interpret "what-if" simulation instructions for a steelmaker's EBITDA bridge and reply ONLY with valid JSON. Instructions may be written in English or Portuguese.
 
-Par comparado: origem = "${pair.source.label}" (versão ${pair.source.version}), destino = "${pair.target.label}" (versão ${pair.target.version}).
+Compared pair: source = "${pair.source.label}" (version ${pair.source.version}), target = "${pair.target.label}" (version ${pair.target.version}).
 
-Itens ajustáveis (use os rótulos EXATOS):
-- sales_qty / sales_price (produtos de venda): ${JSON.stringify(catalog.sales)}
-- fixed_cost (categorias de custo fixo): ${JSON.stringify(catalog.fixed_cost)}
-- input_price (insumos): ${JSON.stringify(catalog.input_price)}
-- usage (linhas de consumo): ${JSON.stringify(catalog.usage)}
-- others (estoque/outros): ${JSON.stringify(catalog.others)}
-- fx (câmbio BRL/USD): key = "fx"
+Adjustable items (use the EXACT labels):
+- sales_qty / sales_price (sales products): ${JSON.stringify(catalog.sales)}
+- fixed_cost (fixed cost categories): ${JSON.stringify(catalog.fixed_cost)}
+- input_price (input materials): ${JSON.stringify(catalog.input_price)}
+- usage (usage lines): ${JSON.stringify(catalog.usage)}
+- others (stock/others): ${JSON.stringify(catalog.others)}
+- fx (BRL/USD exchange rate): key = "fx"
 
-Formato de saída:
-{"interpretation": "frase curta em pt-BR resumindo o que será simulado",
- "adjustments": [{"scope": "sales_qty|sales_price|fixed_cost|input_price|usage|others|fx", "scenario": "source|target", "key": "<rótulo exato>", "pct": <número ou null>, "abs": <número ou null>}]}
+Output format:
+{"interpretation": "short sentence in English summarizing what will be simulated",
+ "adjustments": [{"scope": "sales_qty|sales_price|fixed_cost|input_price|usage|others|fx", "scenario": "source|target", "key": "<exact label>", "pct": <number or null>, "abs": <number or null>}]}
 
-Regras:
-- "venda X maior/menor em N%" sem menção a preço → sales_qty com pct ±N.
-- Menções a preço de venda → sales_price. Preço de matéria-prima/insumo (coal, PCI, coke, pellets...) → input_price.
-- "no MRF7"/"no destino"/versão do destino → scenario "target"; "no Budget"/origem → "source". Sem indicação → "target".
-- pct: use sinal (queda de 10% → -10). abs: kt para volume, USD/t para preços, MUSD para montantes.
-- Se o pedido não fizer sentido ou não corresponder a nenhum item, devolva {"interpretation": "...explicação...", "adjustments": []}.`;
+Rules:
+- "sales of X higher/lower by N%" with no mention of price → sales_qty with pct ±N.
+- Mentions of selling price → sales_price. Raw material / input prices (coal, PCI, coke, pellets...) → input_price.
+- "in MRF7"/"in the target"/target version → scenario "target"; "in Budget"/source → "source". No indication → "target".
+- pct: signed (a 10% drop → -10). abs: kt for volume, USD/t for prices, MUSD for amounts.
+- If the request makes no sense or matches no item, return {"interpretation": "...explanation...", "adjustments": []}.`;
 
   let parsed: { interpretation?: string; adjustments?: Adjustment[] };
   try {
@@ -455,7 +455,7 @@ Regras:
   } catch (err) {
     console.error("simulate: falha ao interpretar prompt", err);
     res.status(400).json({
-      error: "Não foi possível interpretar o prompt. Tente reformular.",
+      error: "Could not interpret the prompt. Try rephrasing.",
     });
     return;
   }
@@ -472,7 +472,7 @@ Regras:
     res.status(400).json({
       error:
         parsed.interpretation ||
-        "Não identifiquei nenhum ajuste no prompt. Ex.: \"venda de Slab Calvert 10% maior no MRF7\".",
+        "No adjustment identified in the prompt. E.g. \"Slab Calvert sales 10% higher in MRF7\".",
     });
     return;
   }
@@ -483,7 +483,7 @@ Regras:
   });
   if (!outcome.applied.length) {
     res.status(400).json({
-      error: `Não encontrei os itens citados (${outcome.notFound.join(", ")}).`,
+      error: `Could not find the items mentioned (${outcome.notFound.join(", ")}).`,
     });
     return;
   }
@@ -533,7 +533,7 @@ Regras:
 
   res.json(
     SimulateBridgeResponse.parse({
-      title: `Simulação — ${pair.source.label} vs ${pair.target.label}`,
+      title: `Simulation — ${pair.source.label} vs ${pair.target.label}`,
       unit: UNIT,
       interpretation: parsed.interpretation ?? outcome.applied.join("; "),
       adjustments: outcome.applied,

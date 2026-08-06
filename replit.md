@@ -38,6 +38,7 @@ Painel executivo que explica a variação de EBITDA (FY26 Budget 632,0 → FY26 
 - Drill-downs por produto incluem uma linha "Demais itens e ajustes" para que a soma sempre feche exatamente com o valor do componente.
 - Zod integers evitados no OpenAPI (`type: number`) — `zod.int()` gerado pelo Orval não existe no zod v3 importado pelo pacote gerado.
 - Recharts: labels de valor são desenhados dentro do shape customizado da barra (o prop `label` do Bar não recebe `payload` no Recharts 2).
+- Interface do painel em inglês (tradução fixa, sem i18n dinâmico). Formato numérico en-US (ponto decimal, ex.: 12.5) aplicado em toda a UI via `Intl.NumberFormat('en-US')`; a entrada de valores no painel de explicações aceita vírgula ou ponto.
 
 ## User preferences
 

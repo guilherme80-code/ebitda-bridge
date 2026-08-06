@@ -84,8 +84,8 @@ function applyOne(raw: RawScenarioData, adj: Adjustment, scenarioLabel: string):
       }
       const what = rows.map((r) => r.label).join(", ");
       return pct != null
-        ? `Volume de ${what} ${fmtPct(pct)} em ${scenarioLabel}`
-        : `Volume de ${what} ${abs! > 0 ? "+" : ""}${abs} kt em ${scenarioLabel}`;
+        ? `${what} volume ${fmtPct(pct)} in ${scenarioLabel}`
+        : `${what} volume ${abs! > 0 ? "+" : ""}${abs} kt in ${scenarioLabel}`;
     }
     case "sales_price": {
       const rows = findByLabel(raw.sales, (r) => r.label, adj.key);
@@ -96,8 +96,8 @@ function applyOne(raw: RawScenarioData, adj: Adjustment, scenarioLabel: string):
       }
       const what = rows.map((r) => r.label).join(", ");
       return pct != null
-        ? `Preço de ${what} ${fmtPct(pct)} em ${scenarioLabel}`
-        : `Preço de ${what} ${abs! > 0 ? "+" : ""}${abs} USD/t em ${scenarioLabel}`;
+        ? `${what} price ${fmtPct(pct)} in ${scenarioLabel}`
+        : `${what} price ${abs! > 0 ? "+" : ""}${abs} USD/t in ${scenarioLabel}`;
     }
     case "fixed_cost": {
       const rows = findByLabel(raw.fixed, (r) => r.category, adj.key);
@@ -108,8 +108,8 @@ function applyOne(raw: RawScenarioData, adj: Adjustment, scenarioLabel: string):
       }
       const what = rows.map((r) => r.category).join(", ");
       return pct != null
-        ? `Custo fixo ${what} ${fmtPct(pct)} em ${scenarioLabel}`
-        : `Custo fixo ${what} ${abs! > 0 ? "+" : ""}${abs} MUSD em ${scenarioLabel}`;
+        ? `Fixed cost ${what} ${fmtPct(pct)} in ${scenarioLabel}`
+        : `Fixed cost ${what} ${abs! > 0 ? "+" : ""}${abs} MUSD in ${scenarioLabel}`;
     }
     case "input_price": {
       const rows = findByLabel(raw.inputs, (r) => r.item, adj.key);
@@ -125,8 +125,8 @@ function applyOne(raw: RawScenarioData, adj: Adjustment, scenarioLabel: string):
       }
       const what = rows.map((r) => r.item).join(", ");
       return pct != null
-        ? `Preço de insumo ${what} ${fmtPct(pct)} em ${scenarioLabel}`
-        : `Preço de insumo ${what} ${abs! > 0 ? "+" : ""}${abs} em ${scenarioLabel}`;
+        ? `Input price ${what} ${fmtPct(pct)} in ${scenarioLabel}`
+        : `Input price ${what} ${abs! > 0 ? "+" : ""}${abs} in ${scenarioLabel}`;
     }
     case "usage":
     case "others": {
@@ -141,18 +141,18 @@ function applyOne(raw: RawScenarioData, adj: Adjustment, scenarioLabel: string):
       }
       const what = rows.map((r) => r.label).join(", ");
       return pct != null
-        ? `${what} ${fmtPct(pct)} em ${scenarioLabel}`
-        : `${what} ${abs! > 0 ? "+" : ""}${abs} MUSD em ${scenarioLabel}`;
+        ? `${what} ${fmtPct(pct)} in ${scenarioLabel}`
+        : `${what} ${abs! > 0 ? "+" : ""}${abs} MUSD in ${scenarioLabel}`;
     }
     case "fx": {
       if (pct != null) {
         raw.params.fxRate *= factor;
         if (raw.params.fcFxRate) raw.params.fcFxRate *= factor;
-        return `Câmbio (BRL/USD) ${fmtPct(pct)} em ${scenarioLabel}`;
+        return `Forex (BRL/USD) ${fmtPct(pct)} in ${scenarioLabel}`;
       }
       raw.params.fxRate += abs!;
       if (raw.params.fcFxRate) raw.params.fcFxRate += abs!;
-      return `Câmbio (BRL/USD) ${abs! > 0 ? "+" : ""}${abs} em ${scenarioLabel}`;
+      return `Forex (BRL/USD) ${abs! > 0 ? "+" : ""}${abs} in ${scenarioLabel}`;
     }
   }
 }

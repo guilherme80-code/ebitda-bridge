@@ -26,7 +26,7 @@ export function ScenarioSimulator({ source, target, enabled, simulation, onResul
       onError: (err: unknown) => {
         const data = (err as { data?: { error?: string } } | undefined)?.data;
         setError(
-          data?.error ?? 'Não foi possível simular. Tente reformular o prompt.',
+          data?.error ?? 'Could not run the simulation. Try rephrasing the prompt.',
         );
       },
     },
@@ -41,9 +41,9 @@ export function ScenarioSimulator({ source, target, enabled, simulation, onResul
     <div className="bg-white border border-slate-200 shadow-sm p-4 sm:p-5 space-y-3">
       <div className="flex items-center gap-2">
         <Sparkles className="w-4 h-4 text-brand-blue" />
-        <h2 className="font-bold text-slate-800 text-sm font-heading">Simular cenário</h2>
+        <h2 className="font-bold text-slate-800 text-sm font-heading">Simulate scenario</h2>
         <span className="text-[10px] font-bold uppercase tracking-widest text-white bg-brand-blue px-2 py-0.5">
-          IA
+          AI
         </span>
       </div>
       <div className="flex flex-col sm:flex-row gap-2">
@@ -52,7 +52,7 @@ export function ScenarioSimulator({ source, target, enabled, simulation, onResul
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && run()}
-          placeholder='Ex.: "se a venda de Slab Calvert no MRF7 for maior em 10%"'
+          placeholder='E.g. "if Slab Calvert sales in MRF7 were 10% higher"'
           data-testid="input-simulation-prompt"
           className="flex-1 border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-brand-blue"
           disabled={!enabled || isPending}
@@ -64,7 +64,7 @@ export function ScenarioSimulator({ source, target, enabled, simulation, onResul
           className="inline-flex items-center justify-center gap-2 bg-brand-blue hover:bg-blue-700 disabled:opacity-40 text-white font-semibold text-sm px-5 py-2.5 transition-colors"
         >
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-          {isPending ? 'Simulando…' : 'Simular'}
+          {isPending ? 'Simulating…' : 'Simulate'}
         </button>
       </div>
 
@@ -82,10 +82,10 @@ export function ScenarioSimulator({ source, target, enabled, simulation, onResul
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-brand-navy">{simulation.interpretation}</p>
             <p className="text-xs font-medium text-brand-navy/80 mt-0.5">
-              {simulation.adjustments.join(' • ')} — impacto no EBITDA final:{' '}
+              {simulation.adjustments.join(' • ')} — impact on final EBITDA:{' '}
               <strong className={simulation.deltaEbitda >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
                 {simulation.deltaEbitda >= 0 ? '+' : ''}
-                {simulation.deltaEbitda.toLocaleString('pt-BR', {
+                {simulation.deltaEbitda.toLocaleString('en-US', {
                   minimumFractionDigits: 1,
                   maximumFractionDigits: 1,
                 })}{' '}
@@ -99,7 +99,7 @@ export function ScenarioSimulator({ source, target, enabled, simulation, onResul
             className="inline-flex items-center gap-1.5 self-start sm:self-auto bg-white border border-brand-blue/30 text-brand-blue hover:bg-blue-50 font-semibold text-xs px-3 py-1.5 transition-colors"
           >
             <X className="w-3.5 h-3.5" />
-            Limpar simulação
+            Clear simulation
           </button>
         </div>
       )}

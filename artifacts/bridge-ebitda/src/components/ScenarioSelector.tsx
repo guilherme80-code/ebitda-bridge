@@ -3,9 +3,9 @@ import type { Scenario } from '@workspace/api-client-react';
 import { cn } from '../lib/utils';
 
 const KIND_LABEL: Record<string, string> = {
-  year: 'Ano',
-  quarter: 'Trimestre',
-  month: 'Mês',
+  year: 'Year',
+  quarter: 'Quarter',
+  month: 'Month',
 };
 
 function ScenarioPicker({
@@ -69,10 +69,10 @@ function ScenarioPicker({
     if (!s) return { disabled: false, hint: '' };
     if (s.hasData) return { disabled: false, hint: '' };
     const missing = s.missingMonths ?? [];
-    if (missing.length === 0) return { disabled: true, hint: ' (sem dados)' };
+    if (missing.length === 0) return { disabled: true, hint: ' (no data)' };
     const shown = missing.slice(0, 3).join(', ');
     const rest = missing.length > 3 ? ` +${missing.length - 3}` : '';
-    return { disabled: true, hint: ` (faltam ${shown}${rest})` };
+    return { disabled: true, hint: ` (missing ${shown}${rest})` };
   };
 
   return (
@@ -83,7 +83,7 @@ function ScenarioPicker({
       <div className="flex items-center gap-3">
         <label className="flex-1">
           <span className="block text-[11px] font-semibold text-slate-500 mb-1">
-            Versão
+            Version
           </span>
           <select
             className="w-full text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-blue/40 cursor-pointer"
@@ -92,14 +92,14 @@ function ScenarioPicker({
           >
             {versions.map((v) => (
               <option key={v} value={v} disabled={!versionHasData(v)}>
-                {versionHasData(v) ? v : `${v} (sem dados)`}
+                {versionHasData(v) ? v : `${v} (no data)`}
               </option>
             ))}
           </select>
         </label>
         <label className="flex-1">
           <span className="block text-[11px] font-semibold text-slate-500 mb-1">
-            Período
+            Period
           </span>
           <select
             className="w-full text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-blue/40 cursor-pointer"
@@ -119,7 +119,7 @@ function ScenarioPicker({
                         disabled={info.disabled}
                         title={
                           info.disabled
-                            ? `Período incompleto — importe os meses faltantes para consolidar${info.hint}`
+                            ? `Incomplete period — import the missing months to consolidate${info.hint}`
                             : undefined
                         }
                       >
@@ -159,7 +159,7 @@ export function ScenarioSelector({
     <div className="w-full">
       <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
         <ScenarioPicker
-          title="Origem"
+          title="Source"
           scenarios={scenarios}
           selectedId={sourceId}
           onSelect={(id) => onChange(id, targetId ?? id)}
@@ -168,7 +168,7 @@ export function ScenarioSelector({
           <ArrowRight className="w-4 h-4" />
         </div>
         <ScenarioPicker
-          title="Destino"
+          title="Target"
           scenarios={scenarios}
           selectedId={targetId}
           onSelect={(id) => onChange(sourceId ?? id, id)}
@@ -181,8 +181,8 @@ export function ScenarioSelector({
         )}
       >
         {!bothHaveData
-          ? 'Uma das versões selecionadas ainda não possui dados importados. Selecione outra combinação.'
-          : 'Compare períodos do mesmo tipo: ano com ano, trimestre com trimestre ou mês com mês.'}
+          ? 'One of the selected versions has no imported data yet. Choose another combination.'
+          : 'Compare periods of the same kind: year with year, quarter with quarter, or month with month.'}
       </p>
     </div>
   );

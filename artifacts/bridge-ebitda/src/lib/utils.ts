@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatMUSD(value: number, showSign = false): string {
-  const formatted = new Intl.NumberFormat('pt-BR', {
+  const formatted = new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }).format(value);

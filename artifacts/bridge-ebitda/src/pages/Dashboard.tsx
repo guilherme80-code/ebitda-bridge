@@ -116,10 +116,10 @@ export default function Dashboard() {
             FP&A Executive View
           </div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight font-heading text-white">
-            Bridge de EBITDA{sourceScenario && targetScenario ? ` — ${sourceScenario.label} vs ${targetScenario.label}` : ''}
+            EBITDA Bridge{sourceScenario && targetScenario ? ` — ${sourceScenario.label} vs ${targetScenario.label}` : ''}
           </h1>
           <p className="text-white/80 mt-2 font-medium text-sm md:text-base">
-            A variação explica a passagem do cenário de origem para o cenário de destino • Valores expressos em <strong className="text-white">{bridge?.unit || 'MUSD'}</strong>
+            The variance explains the move from the source scenario to the target scenario • Values expressed in <strong className="text-white">{bridge?.unit || 'MUSD'}</strong>
           </p>
         </div>
       </header>
@@ -145,7 +145,7 @@ export default function Dashboard() {
             <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <Loader2 className="w-10 h-10 animate-spin text-slate-300" />
             </div>
-            <p className="font-semibold text-slate-500">Construindo painel executivo...</p>
+            <p className="font-semibold text-slate-500">Building executive dashboard...</p>
           </div>
         )}
 
@@ -154,9 +154,9 @@ export default function Dashboard() {
             <div className="p-3 bg-white rounded-xl shadow-sm">
               <AlertCircle className="w-8 h-8 text-rose-500" />
             </div>
-            <h2 className="font-bold text-xl text-slate-800">Não foi possível carregar os dados</h2>
+            <h2 className="font-bold text-xl text-slate-800">Could not load the data</h2>
             <p className="text-sm font-medium opacity-80 text-center max-w-md">
-              Verifique se a combinação de cenários selecionada possui bridge disponível, ou tente atualizar a página.
+              Check whether the selected scenario combination has a bridge available, or try refreshing the page.
             </p>
           </div>
         )}
@@ -182,17 +182,17 @@ export default function Dashboard() {
             <div className="mb-8 px-4 pt-4 sm:p-0 flex flex-col sm:flex-row sm:justify-between sm:items-end">
               <div>
                 <h2 className="text-xl font-bold text-slate-800 font-heading">
-                  Composição da Variação de EBITDA
+                  EBITDA Variance Composition
                   {simulation && (
                     <span className="ml-3 align-middle text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-blue-50 border border-brand-blue/20 px-2.5 py-1">
-                      Simulação
+                      Simulation
                     </span>
                   )}
                 </h2>
                 <p className="text-sm font-medium text-slate-500 mt-1">
                   {simulation
-                    ? 'Comparação original vs simulado — limpe a simulação para voltar ao bridge original.'
-                    : 'Clique nas alavancas com detalhamento para análise aprofundada (drill-down).'}
+                    ? 'Original vs simulated comparison — clear the simulation to return to the original bridge.'
+                    : 'Click drivers with breakdowns for a deeper drill-down analysis.'}
                 </p>
               </div>
               {!simulation &&
@@ -208,10 +208,10 @@ export default function Dashboard() {
                             'repeating-linear-gradient(45deg, rgba(100,116,139,0.45) 0 2px, rgba(100,116,139,0.12) 2px 6px)',
                         }}
                       />{' '}
-                      Explicado
+                      Explained
                     </span>
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                      <span className="w-3 h-3 bg-rose-500" /> Não explicado
+                      <span className="w-3 h-3 bg-rose-500" /> Unexplained
                     </span>
                   </div>
                 )}
@@ -221,10 +221,10 @@ export default function Dashboard() {
                     <span className="w-3 h-3 bg-slate-400/60" /> Original
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                    <span className="w-3 h-3 bg-emerald-500" /> Simulado
+                    <span className="w-3 h-3 bg-emerald-500" /> Simulated
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-blue">
-                    <span className="w-3 h-3 border-2 border-brand-blue bg-white" /> Ajustado
+                    <span className="w-3 h-3 border-2 border-brand-blue bg-white" /> Adjusted
                   </span>
                 </div>
               )}

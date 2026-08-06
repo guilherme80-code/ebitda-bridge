@@ -8,7 +8,7 @@ export function SummaryCards({ summary }: { summary: BridgeSummary }) {
       {/* Variação Total */}
       <div className="bg-white p-5 border border-slate-200 shadow-sm flex flex-col justify-between relative group border-t-4 border-t-brand-navy transition-colors hover:border-t-brand-orange">
         <div className="flex justify-between items-start">
-          <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider font-heading">Variação de EBITDA</p>
+          <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider font-heading">EBITDA Variance</p>
           <Activity className="w-4 h-4 text-brand-navy" />
         </div>
         <div className="mt-2 flex items-baseline space-x-2">
@@ -32,7 +32,7 @@ export function SummaryCards({ summary }: { summary: BridgeSummary }) {
       {/* Maior Positivo */}
       <div className="bg-white p-5 border border-slate-200 shadow-sm flex flex-col justify-between relative group border-t-4 border-t-emerald-500 transition-colors">
         <div className="flex justify-between items-start">
-          <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider font-heading">Principal Alavanca (+)</p>
+          <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider font-heading">Top Driver (+)</p>
           <TrendingUp className="w-4 h-4 text-emerald-500" />
         </div>
         <div className="mt-4">
@@ -46,7 +46,7 @@ export function SummaryCards({ summary }: { summary: BridgeSummary }) {
       {/* Maior Negativo */}
       <div className="bg-white p-5 border border-slate-200 shadow-sm flex flex-col justify-between relative group border-t-4 border-t-rose-500 transition-colors">
         <div className="flex justify-between items-start">
-          <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider font-heading">Principal Detrator (-)</p>
+          <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider font-heading">Top Detractor (-)</p>
           <TrendingDown className="w-4 h-4 text-rose-500" />
         </div>
         <div className="mt-4">
@@ -64,7 +64,7 @@ export function SummaryCards({ summary }: { summary: BridgeSummary }) {
             <div className="bg-emerald-100 p-1.5 text-emerald-600">
               <PlusCircle className="w-4 h-4" />
             </div>
-            <span className="text-sm font-semibold text-slate-700 font-heading">Total Efeitos (+)</span>
+            <span className="text-sm font-semibold text-slate-700 font-heading">Total Effects (+)</span>
           </div>
           <span className="font-bold text-emerald-600 text-lg font-heading">{formatMUSD(summary.positiveTotal, true)}</span>
         </div>
@@ -73,7 +73,7 @@ export function SummaryCards({ summary }: { summary: BridgeSummary }) {
             <div className="bg-rose-100 p-1.5 text-rose-600">
               <MinusCircle className="w-4 h-4" />
             </div>
-            <span className="text-sm font-semibold text-slate-700 font-heading">Total Efeitos (-)</span>
+            <span className="text-sm font-semibold text-slate-700 font-heading">Total Effects (-)</span>
           </div>
           <span className="font-bold text-rose-600 text-lg font-heading">{formatMUSD(summary.negativeTotal, true)}</span>
         </div>

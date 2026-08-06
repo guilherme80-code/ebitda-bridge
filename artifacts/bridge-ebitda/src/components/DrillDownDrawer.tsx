@@ -46,7 +46,7 @@ export function DrillDownDrawer({
     if (!data?.lines) return {};
     const groups: Record<string, BridgeDetailLine[]> = {};
     data.lines.forEach(line => {
-      const g = line.group || 'Geral';
+      const g = line.group || 'General';
       if (!groups[g]) groups[g] = [];
       groups[g].push(line);
     });
@@ -76,7 +76,7 @@ export function DrillDownDrawer({
         <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-brand-navy text-white">
           <div>
             <h2 className="text-xl font-bold font-heading">{title}</h2>
-            <p className="text-xs font-semibold uppercase tracking-wider text-white/60 mt-1.5">Detalhamento do Componente</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/60 mt-1.5">Component Breakdown</p>
           </div>
           <button 
             onClick={handleClose}
@@ -90,13 +90,13 @@ export function DrillDownDrawer({
           {isLoading && (
             <div className="flex flex-col items-center justify-center h-40 space-y-4 text-brand-navy/40">
               <Loader2 className="w-8 h-8 animate-spin" />
-              <p className="text-sm font-medium font-heading">Buscando detalhamento...</p>
+              <p className="text-sm font-medium font-heading">Loading breakdown...</p>
             </div>
           )}
 
           {isError && (
             <div className="bg-rose-50 text-rose-600 p-5 border border-rose-100 font-medium text-sm">
-              Ocorreu um erro ao carregar os detalhes deste componente.
+              Something went wrong while loading the details for this component.
             </div>
           )}
 
@@ -108,7 +108,7 @@ export function DrillDownDrawer({
                   <div className="w-12 h-12 bg-white shadow-sm flex items-center justify-center border border-slate-200">
                     <Layers className="w-5 h-5 text-brand-navy" />
                   </div>
-                  <span className="font-bold text-slate-700 font-heading">Impacto Consolidado</span>
+                  <span className="font-bold text-slate-700 font-heading">Consolidated Impact</span>
                 </div>
                 <span className={cn(
                   "text-2xl font-bold tracking-tight font-heading",
@@ -133,7 +133,7 @@ export function DrillDownDrawer({
                               type="button"
                               onClick={() => onMarketItemClick(line.label)}
                               className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-blue hover:underline underline-offset-2 cursor-pointer"
-                              title="Ver explicação"
+                              title="View explanation"
                               data-testid={`button-market-line-${line.id}`}
                             >
                               {line.label}

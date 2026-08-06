@@ -27,7 +27,7 @@ router.get("/bridge/explanations", async (req, res) => {
   if (!source || !target) {
     return res
       .status(400)
-      .json({ error: "Informe os cenários de origem e destino." });
+      .json({ error: "Provide the source and target scenarios." });
   }
   const rows = await db
     .select()
@@ -53,43 +53,43 @@ router.post("/bridge/explanations", async (req, res) => {
   if (!parsed.success) {
     return res
       .status(400)
-      .json({ error: "Dados inválidos: informe valor e texto da explicação." });
+      .json({ error: "Invalid data: provide the explanation value and text." });
   }
   const { sourceId, targetId, valueMusd } = parsed.data;
   const text = parsed.data.text.trim();
   if (!text) {
     return res
       .status(400)
-      .json({ error: "Descreva a explicação da diferença." });
+      .json({ error: "Describe the explanation for the difference." });
   }
   if (text.length > MAX_TEXT_LENGTH) {
     return res.status(400).json({
-      error: `A explicação deve ter no máximo ${MAX_TEXT_LENGTH} caracteres.`,
+      error: `The explanation must be at most ${MAX_TEXT_LENGTH} characters.`,
     });
   }
   if (!Number.isFinite(valueMusd)) {
     return res
       .status(400)
-      .json({ error: "Informe um valor numérico válido em MUSD." });
+      .json({ error: "Provide a valid numeric value in MUSD." });
   }
   const { scenarios, withData } = await loadCatalog();
   const source = scenarios.find((s) => s.id === sourceId);
   const target = scenarios.find((s) => s.id === targetId);
   if (!source || !target) {
     return res.status(400).json({
-      error: `Cenário desconhecido: ${!source ? sourceId : targetId}`,
+      error: `Unknown scenario: ${!source ? sourceId : targetId}`,
     });
   }
   if (source.periodKind !== target.periodKind) {
     return res.status(400).json({
       error:
-        "Os cenários de origem e destino precisam ter a mesma granularidade de período.",
+        "Source and target scenarios must have the same period granularity.",
     });
   }
   if (!withData.has(sourceId) || !withData.has(targetId)) {
     return res.status(400).json({
       error:
-        "A combinação de cenários ainda não possui dados importados para calcular a bridge.",
+        "The scenario combination has no imported data yet to compute the bridge.",
     });
   }
   const [row] = await db
@@ -103,14 +103,14 @@ router.post("/bridge/explanations", async (req, res) => {
 router.delete("/bridge/explanations/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
-    return res.status(404).json({ error: "Explicação não encontrada." });
+    return res.status(404).json({ error: "Explanation not found." });
   }
   const deleted = await db
     .delete(bridgeExplanationsTable)
     .where(eq(bridgeExplanationsTable.id, id))
     .returning({ id: bridgeExplanationsTable.id });
   if (deleted.length === 0) {
-    return res.status(404).json({ error: "Explicação não encontrada." });
+    return res.status(404).json({ error: "Explanation not found." });
   }
   return res.status(204).end();
 });

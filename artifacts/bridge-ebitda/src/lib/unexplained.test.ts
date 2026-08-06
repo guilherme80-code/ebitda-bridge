@@ -5,9 +5,9 @@ import type { BridgeStep } from '@workspace/api-client-react';
 // Bridge que FECHA pela fonte: sem passo "Não Explicado" vindo do servidor.
 const closedSteps: BridgeStep[] = [
   { key: 'ebitda_source', label: 'EBITDA FY26 Budget', value: 632, cumulative: 632, kind: 'total_start', hasDetail: false },
-  { key: 'selling_price', label: 'Preço de venda', value: 100, cumulative: 732, kind: 'delta', hasDetail: true },
-  { key: 'fx', label: 'Câmbio', value: 25.9, cumulative: 757.9, kind: 'delta', hasDetail: true },
-  { key: 'sv_others', label: 'Estoque / Outros', value: -10.2, cumulative: 747.7, kind: 'delta', hasDetail: true },
+  { key: 'selling_price', label: 'Selling Price', value: 100, cumulative: 732, kind: 'delta', hasDetail: true },
+  { key: 'fx', label: 'Forex', value: 25.9, cumulative: 757.9, kind: 'delta', hasDetail: true },
+  { key: 'sv_others', label: 'Stock / Others', value: -10.2, cumulative: 747.7, kind: 'delta', hasDetail: true },
   { key: 'ebitda_target', label: 'EBITDA FY26 MRF7', value: 747.7, cumulative: 747.7, kind: 'total_end', hasDetail: false },
 ];
 
@@ -16,9 +16,9 @@ const closedSteps: BridgeStep[] = [
 const discrepancy = -6.2;
 const openSteps: BridgeStep[] = [
   { key: 'ebitda_source', label: 'EBITDA FY26 Budget', value: 632, cumulative: 632, kind: 'total_start', hasDetail: false },
-  { key: 'selling_price', label: 'Preço de venda', value: 100, cumulative: 732, kind: 'delta', hasDetail: true },
-  { key: 'sv_others', label: 'Estoque / Outros', value: 21.9, cumulative: 753.9, kind: 'delta', hasDetail: true },
-  { key: 'unexplained', label: 'Não Explicado', value: discrepancy, cumulative: 747.7, kind: 'delta', hasDetail: false },
+  { key: 'selling_price', label: 'Selling Price', value: 100, cumulative: 732, kind: 'delta', hasDetail: true },
+  { key: 'sv_others', label: 'Stock / Others', value: 21.9, cumulative: 753.9, kind: 'delta', hasDetail: true },
+  { key: 'unexplained', label: 'Unexplained', value: discrepancy, cumulative: 747.7, kind: 'delta', hasDetail: false },
   { key: 'ebitda_target', label: 'EBITDA FY26 MRF7', value: 747.7, cumulative: 747.7, kind: 'total_end', hasDetail: false },
 ];
 

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import type { MarketExplanation } from '@workspace/api-client-react';
 import { cn } from '../lib/utils';
 
-const nf = new Intl.NumberFormat('pt-BR', {
+const nf = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 3,
 });
@@ -55,12 +55,12 @@ export function MarketExplanationDialog({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={`Explicações: ${explanation.title}`}
+        aria-label={`Explanations: ${explanation.title}`}
       >
         <div className="flex items-start justify-between px-6 py-5 bg-brand-navy text-white">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-1">
-              Explicações
+              Explanations
             </p>
             <h2 className="text-xl font-bold font-heading flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-brand-orange" />
@@ -68,9 +68,9 @@ export function MarketExplanationDialog({
             </h2>
             {itemLabel && (
               <p className="text-xs font-medium text-white/70 mt-1.5">
-                Impacta o item <strong className="text-white">{itemLabel}</strong>
+                Affects item <strong className="text-white">{itemLabel}</strong>
                 {explanation.items.length > 1 && (
-                  <> — também: {explanation.items.filter((i) => i !== itemLabel).join(', ')}</>
+                  <> — also: {explanation.items.filter((i) => i !== itemLabel).join(', ')}</>
                 )}
               </p>
             )}
@@ -78,7 +78,7 @@ export function MarketExplanationDialog({
           <button
             onClick={onClose}
             className="p-2 hover:bg-white/10 transition-colors text-white/80 hover:text-white"
-            aria-label="Fechar"
+            aria-label="Close"
             data-testid="button-close-market-explanation"
           >
             <X className="w-5 h-5" />
@@ -93,10 +93,10 @@ export function MarketExplanationDialog({
                   {explanation.unitLabel}
                 </th>
                 <th className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">
-                  {sourceLabel ?? 'Origem'}
+                  {sourceLabel ?? 'Source'}
                 </th>
                 <th className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">
-                  {targetLabel ?? 'Destino'}
+                  {targetLabel ?? 'Target'}
                 </th>
                 <th className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">Var</th>
                 <th className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">kt</th>
@@ -141,7 +141,7 @@ export function MarketExplanationDialog({
         {explanation.months.length > 1 && (
           <div className="px-6 py-4 border-t border-slate-200 max-h-[40vh] overflow-y-auto" data-testid="section-monthly-detail">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
-              Detalhe por mês — soma acima consolida {explanation.months.length} meses
+              Monthly detail — the sum above consolidates {explanation.months.length} months
             </p>
             <div className="space-y-4">
               {explanation.months.map((m) => (
@@ -185,7 +185,7 @@ export function MarketExplanationDialog({
         )}
 
         <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-[11px] font-medium text-slate-400">
-          Dados importados — informativos, não alteram o cálculo do bridge.
+          Imported data — informational only, does not affect the bridge calculation.
         </div>
       </div>
     </div>

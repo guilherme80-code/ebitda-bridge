@@ -107,14 +107,14 @@ export const miscFactsTable = pgTable("misc_facts", {
 // Waterfall driver catalog (order and Portuguese labels).
 export const BRIDGE_DRIVERS = [
   { key: "vol_mix", label: "Volume & Mix" },
-  { key: "selling_price", label: "Preço de venda" },
-  { key: "input_price", label: "Preço de insumos" },
-  { key: "usage", label: "Consumo (Usage)" },
-  { key: "fixed_cost", label: "Custo fixo" },
-  { key: "forex", label: "Câmbio" },
+  { key: "selling_price", label: "Selling Price" },
+  { key: "input_price", label: "Input Prices" },
+  { key: "usage", label: "Usage" },
+  { key: "fixed_cost", label: "Fixed Cost" },
+  { key: "forex", label: "Forex" },
   // Barra única combinando Variação de estoque e Outros; o detalhamento
   // (drill-down) mostra os dois grupos separados.
-  { key: "sv_others", label: "Estoque / Outros" },
+  { key: "sv_others", label: "Stock / Others" },
 ] as const;
 
 export const insertScenarioSchema = createInsertSchema(scenariosTable);

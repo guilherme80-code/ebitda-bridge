@@ -7,14 +7,14 @@ import {
 import { ChevronRight, Info, Table2 } from 'lucide-react';
 import { useState } from 'react';
 
-const nf = new Intl.NumberFormat('pt-BR', {
+const nf = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
 
 function fmt(v: number | null): string {
   if (v == null) return '—';
-  if (Math.abs(v) < 0.05) return '0,0';
+  if (Math.abs(v) < 0.05) return '0.0';
   return nf.format(v);
 }
 
@@ -61,17 +61,17 @@ export function DetailedTables({
       <div className="px-1">
         <h2 className="text-xl font-bold font-heading text-slate-800 flex items-center gap-2">
           <Table2 className="w-5 h-5 text-slate-400" />
-          Tabelas detalhadas por alavanca
+          Detailed tables by driver
           {simulating && (
             <span className="text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-blue-50 border border-brand-blue/20 px-2.5 py-1">
-              Simulação
+              Simulation
             </span>
           )}
         </h2>
         <p className="text-sm font-medium text-slate-500 mt-1">
           {simulating
-            ? 'Valores simulados — as células ajustadas aparecem destacadas com o valor original ("antes") logo abaixo.'
-            : 'Aberturas equivalentes às abas da planilha (Receita, Custo fixo, Insumos, Consumo, Câmbio, Estoque/Outros).'}
+            ? 'Simulated values — adjusted cells are highlighted with the original ("before") value right below.'
+            : 'Breakdowns equivalent to the spreadsheet tabs (Revenue, Fixed cost, Inputs, Usage, Forex, Stock/Others).'}
         </p>
       </div>
 
@@ -91,7 +91,7 @@ export function DetailedTables({
               <thead>
                 <tr className="bg-slate-50 text-slate-500">
                   <th className="text-left font-semibold px-5 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50">
-                    Linha
+                    Line
                   </th>
                   {table.columns.map((c) => (
                     <th key={c.key} className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">
@@ -153,7 +153,7 @@ export function DetailedTables({
                               onMarketItemClick(row.label);
                             }}
                             className="inline-flex items-center gap-1.5 font-semibold text-brand-blue hover:underline underline-offset-2 cursor-pointer"
-                            title="Ver explicação"
+                            title="View explanation"
                             data-testid={`button-market-item-${table.key}-${i}`}
                           >
                             {row.label}
@@ -164,14 +164,14 @@ export function DetailedTables({
                         )}
                         {rowChanged && row.kind === 'row' && (
                           <span className="ml-2 align-middle text-[9px] font-bold uppercase tracking-widest text-brand-blue bg-blue-100/80 px-1.5 py-0.5 border border-brand-blue/10">
-                            Ajustado
+                            Adjusted
                           </span>
                         )}
                       </td>
                       {row.values.map((v, j) => {
                         const isEffect = /MUSD/.test(table.columns[j]?.label ?? '');
                         const colored =
-                          isEffect && v != null && Math.abs(v) >= 0.05 && /efeito|Vol & Mix|Preço \(|Câmbio \(/i.test(table.columns[j]?.label ?? '');
+                          isEffect && v != null && Math.abs(v) >= 0.05 && /effect|Vol & Mix|Price \(|Forex \(/i.test(table.columns[j]?.label ?? '');
                         const cellChanged = simRow?.changed[j] ?? false;
                         const baseV = simRow?.baseValues[j] ?? null;
                         return (
@@ -186,7 +186,7 @@ export function DetailedTables({
                             </span>
                             {cellChanged && (
                               <span className="block text-[10px] font-medium text-slate-400">
-                                antes: {fmt(baseV)}
+                                before: {fmt(baseV)}
                               </span>
                             )}
                           </td>

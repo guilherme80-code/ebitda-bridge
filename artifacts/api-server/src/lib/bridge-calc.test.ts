@@ -72,14 +72,14 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)
   it("detalhe da barra Estoque/Outros traz os dois grupos e soma o total", () => {
     const lines = bridge.details["sv_others"];
     const groups = new Set(lines.map((l) => l.group));
-    expect(groups.has("Outros")).toBe(true);
-    expect(groups.has("Variação de estoque")).toBe(true);
+    expect(groups.has("Others")).toBe(true);
+    expect(groups.has("Stock variation")).toBe(true);
     const sumStock = (d: typeof source) =>
       d.misc
         .filter((m) => m.driver === "stock_variation")
         .reduce((s, m) => s + m.amountKusd, 0);
     const stockLines = lines
-      .filter((l) => l.group === "Variação de estoque")
+      .filter((l) => l.group === "Stock variation")
       .reduce((s, l) => s + l.value, 0);
     expect(stockLines).toBeCloseTo((sumStock(target) - sumStock(source)) / 1000, 9);
   });

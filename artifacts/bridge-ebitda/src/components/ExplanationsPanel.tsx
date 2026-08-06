@@ -45,7 +45,7 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
         setFormError(null);
         invalidate();
       },
-      onError: () => setFormError('Não foi possível salvar a explicação. Tente novamente.'),
+      onError: () => setFormError('Could not save the explanation. Please try again.'),
     },
   });
   const { mutate: remove, isPending: removing } = useDeleteBridgeExplanation({
@@ -60,11 +60,11 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
   const submit = () => {
     const num = Number(value.replace(',', '.'));
     if (!value.trim() || Number.isNaN(num)) {
-      setFormError('Informe o valor da diferença em MUSD (ex.: 12,5 ou -3,2).');
+      setFormError('Enter the difference value in MUSD (e.g. 12.5 or -3.2).');
       return;
     }
     if (!text.trim()) {
-      setFormError('Descreva a explicação da diferença.');
+      setFormError('Describe the explanation for the difference.');
       return;
     }
     create({ data: { sourceId, targetId, valueMusd: num, text: text.trim() } });
@@ -79,10 +79,10 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
         <div>
           <h2 className="text-xl font-bold text-slate-800 font-heading flex items-center gap-2">
             <MessageSquareText className="w-5 h-5 text-brand-orange" />
-            Explicações da Variação
+            Variance Explanations
           </h2>
           <p className="text-sm font-medium text-slate-500 mt-1">
-            O bridge não fecha só com os dados da fonte. Registre o valor e a explicação da diferença. As explicações ficam salvas para quem consultar esta combinação no futuro.
+            The bridge does not close from source data alone. Record the value and the explanation for the difference. Explanations are saved for anyone reviewing this scenario combination later.
           </p>
         </div>
         {typeof residual === 'number' && (
@@ -91,13 +91,13 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
             data-testid="text-variation-summary"
           >
             <span>
-              Diferença a explicar:{' '}
+              Difference to explain:{' '}
               <span className={cn('font-mono font-bold', residual >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
                 {residual > 0 ? '+' : ''}{formatMUSD(residual)} MUSD
               </span>
             </span>
             <span className="text-slate-500" data-testid="text-explained-total">
-              Explicado:{' '}
+              Explained:{' '}
               <span className="font-mono font-bold text-slate-700">
                 {explainedTotal > 0 ? '+' : ''}{formatMUSD(explainedTotal)} MUSD
               </span>
@@ -110,11 +110,11 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
                   data-testid="text-remaining-to-explain"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  Falta explicar: <span className="font-mono font-bold">0,0 MUSD</span>
+                  Left to explain: <span className="font-mono font-bold">0.0 MUSD</span>
                 </span>
               ) : (
                 <span data-testid="text-remaining-to-explain">
-                  Falta explicar:{' '}
+                  Left to explain:{' '}
                   <span className={cn('font-mono font-bold', remaining > 0 ? 'text-emerald-600' : 'text-rose-600')}>
                     {remaining > 0 ? '+' : ''}{formatMUSD(remaining)} MUSD
                   </span>
@@ -128,11 +128,11 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
       {/* Lista de explicações salvas */}
       {isLoading ? (
         <div className="flex items-center gap-2 text-slate-400 text-sm py-4">
-          <Loader2 className="w-4 h-4 animate-spin" /> Carregando explicações...
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading explanations...
         </div>
       ) : explanations.length === 0 ? (
         <p className="text-sm text-slate-400 italic py-2" data-testid="text-no-explanations">
-          Nenhuma explicação registrada para esta combinação de cenários.
+          No explanations recorded for this scenario combination.
         </p>
       ) : (
         <ul className="space-y-3 mb-6" data-testid="list-explanations">
@@ -155,13 +155,13 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap">{e.text}</p>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  {new Date(e.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                  {new Date(e.createdAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}
                 </p>
               </div>
               <button
                 onClick={() => remove({ id: e.id })}
                 disabled={removing}
-                title="Excluir explicação"
+                title="Delete explanation"
                 className="text-slate-300 hover:text-rose-500 transition-colors p-1"
                 data-testid={`button-delete-explanation-${e.id}`}
               >
@@ -177,26 +177,26 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="sm:w-44">
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-              Valor (MUSD)
+              Value (MUSD)
             </label>
             <input
               type="text"
               inputMode="decimal"
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="ex.: 12,5"
+              placeholder="e.g. 12.5"
               className="w-full border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand-blue"
               data-testid="input-explanation-value"
             />
           </div>
           <div className="flex-1">
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-              Explicação da diferença
+              Explanation for the difference
             </label>
             <Textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Descreva a causa desta parte da variação (ex.: reajuste de preço no mercado interno)"
+              placeholder="Describe the cause of this part of the variance (e.g. price adjustment in the domestic market)"
               className="min-h-[64px]"
               data-testid="input-explanation-text"
             />
@@ -209,7 +209,7 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
               data-testid="button-add-explanation"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Adicionar
+              Add
             </button>
           </div>
         </div>

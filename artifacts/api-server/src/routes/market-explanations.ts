@@ -22,13 +22,13 @@ router.get("/bridge/market-explanations", async (req, res) => {
   if (!source || !target) {
     return res
       .status(400)
-      .json({ error: "Informe os cenários de origem e destino." });
+      .json({ error: "Provide the source and target scenarios." });
   }
   const pairs = monthPairsOf(source, target);
   if (pairs === null) {
     return res.status(400).json({
       error:
-        "Os períodos de origem e destino têm granularidades diferentes (ano vs trimestre vs mês).",
+        "Source and target periods have different granularities (year vs quarter vs month).",
     });
   }
   if (pairs.length === 0) return res.json({ explanations: [] });

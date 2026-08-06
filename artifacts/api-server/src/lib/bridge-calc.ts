@@ -48,7 +48,7 @@ export interface DetailLine {
 
 export interface BridgeTableColumn {
   key: string;
-  label: string; // inclui a unidade, ex.: "Qtd origem (kt)"
+  label: string; // inclui a unidade, ex.: "Qty source (kt)"
 }
 
 export interface BridgeTableRow {
@@ -159,7 +159,7 @@ export function computeBridge(
         : priceUsd;
     sellingPrice += price;
     if (Math.abs(price) > 1e-9) {
-      priceLines.push({ label, group: "Por produto", value: price / K, sortOrder });
+      priceLines.push({ label, group: "By product", value: price / K, sortOrder });
     }
 
     // Volume & Mix sobre margem de contribuição (base origem).
@@ -173,7 +173,7 @@ export function computeBridge(
     if (Math.abs(volMix) > 1e-9) {
       volMixLines.push({
         label,
-        group: "Por produto",
+        group: "By product",
         value: volMix / K,
         sortOrder: 100 + sortOrder,
       });
@@ -194,8 +194,8 @@ export function computeBridge(
     });
   }
   const volMixDetail: DetailLine[] = [
-    { label: "Volume", group: "Resumo", value: volume / K, sortOrder: 0 },
-    { label: "Mix", group: "Resumo", value: mixTotal / K, sortOrder: 1 },
+    { label: "Volume", group: "Summary", value: volume / K, sortOrder: 0 },
+    { label: "Mix", group: "Summary", value: mixTotal / K, sortOrder: 1 },
     ...volMixLines,
   ];
 
@@ -210,8 +210,8 @@ export function computeBridge(
   const fxCost = ebitdaCostT * target.params.dmCostShare * fxFactor; // J151
   const forex = fxRevenue + fxCost;
   const forexDetail: DetailLine[] = [
-    { label: "Receita mercado doméstico", group: null, value: fxRevenue / K, sortOrder: 0 },
-    { label: "Custos (parcela doméstica)", group: null, value: fxCost / K, sortOrder: 1 },
+    { label: "Domestic market revenue", group: null, value: fxRevenue / K, sortOrder: 0 },
+    { label: "Costs (domestic share)", group: null, value: fxCost / K, sortOrder: 1 },
   ];
 
   // ---------- custo fixo (linhas 116-124) ----------
@@ -370,18 +370,18 @@ export function computeBridge(
   // fechamento só entra quando não há Stock Variation real (com ela, a
   // diferença vira "Não Explicado" no bridge, fora desta barra).
   const svDetail: DetailLine[] = [
-    ...others.lines.map((l) => ({ ...l, group: "Outros" })),
+    ...others.lines.map((l) => ({ ...l, group: "Others" })),
     ...stock.lines.map((l, i) => ({
       ...l,
-      group: "Variação de estoque",
+      group: "Stock variation",
       sortOrder: 100 + i,
     })),
     ...(hasStockData
       ? []
       : [
           {
-            label: "Variação de estoque — ajuste de fechamento",
-            group: "Variação de estoque",
+            label: "Stock variation — closing adjustment",
+            group: "Stock variation",
             value: (stockPlug - stock.total) / K,
             sortOrder: 999,
           },
@@ -454,22 +454,22 @@ export function computeBridge(
   // Blocos de vendas: grupo próprio (coluna grupo) ou Externo/Mercado Interno.
   const salesGrouped = salesRows.map((r) => ({
     ...r,
-    group: r.group ?? (r.domestic ? "Mercado Interno" : "Externo"),
+    group: r.group ?? (r.domestic ? "Domestic Market" : "External"),
   }));
   const sumSalesValues = (rows: typeof salesRows): (number | null)[] =>
     sumSales(rows, "", "subtotal").values;
   tables.push({
     key: "sales",
-    title: "Vendas — volume, preço e efeitos por produto",
+    title: "Sales — volume, price and effects by product",
     columns: [
-      { key: "qty_b", label: "Qtd origem (kt)" },
-      { key: "qty_t", label: "Qtd destino (kt)" },
-      { key: "qty_var", label: "Δ Qtd (kt)" },
-      { key: "price_b", label: "Preço origem (USD/t)" },
-      { key: "price_t", label: "Preço destino (USD/t)" },
+      { key: "qty_b", label: "Qty source (kt)" },
+      { key: "qty_t", label: "Qty target (kt)" },
+      { key: "qty_var", label: "Δ Qty (kt)" },
+      { key: "price_b", label: "Price source (USD/t)" },
+      { key: "price_t", label: "Price target (USD/t)" },
       { key: "vol_mix", label: "Vol & Mix (MUSD)" },
-      { key: "price", label: "Preço (MUSD)" },
-      { key: "forex", label: "Câmbio (MUSD)" },
+      { key: "price", label: "Price (MUSD)" },
+      { key: "forex", label: "Forex (MUSD)" },
     ],
     rows: [
       ...groupedRows(salesGrouped, salesValues, sumSalesValues),
@@ -481,12 +481,12 @@ export function computeBridge(
   fixedRows.sort((a, b) => a.sortOrder - b.sortOrder);
   tables.push({
     key: "fixed_cost",
-    title: "Custo fixo — por categoria",
+    title: "Fixed cost — by category",
     columns: [
-      { key: "amt_b", label: "Montante origem (MUSD)" },
-      { key: "amt_t", label: "Montante destino (MUSD)" },
-      { key: "fc_forex", label: "Efeito câmbio (MUSD)" },
-      { key: "effect", label: "Efeito custo fixo (MUSD)" },
+      { key: "amt_b", label: "Amount source (MUSD)" },
+      { key: "amt_t", label: "Amount target (MUSD)" },
+      { key: "fc_forex", label: "Forex effect (MUSD)" },
+      { key: "effect", label: "Fixed cost effect (MUSD)" },
     ],
     rows: [
       ...groupedRows(
@@ -516,13 +516,13 @@ export function computeBridge(
   inputRows.sort((a, b) => a.sortOrder - b.sortOrder);
   tables.push({
     key: "input_price",
-    title: "Preço de insumos — por item",
+    title: "Input prices — by item",
     columns: [
-      { key: "price_b", label: "Preço origem (USD)" },
-      { key: "price_t", label: "Preço destino (USD)" },
-      { key: "amt_b", label: "Montante origem (MUSD)" },
-      { key: "amt_t", label: "Montante destino (MUSD)" },
-      { key: "effect", label: "Efeito (MUSD)" },
+      { key: "price_b", label: "Price source (USD)" },
+      { key: "price_t", label: "Price target (USD)" },
+      { key: "amt_b", label: "Amount source (MUSD)" },
+      { key: "amt_t", label: "Amount target (MUSD)" },
+      { key: "effect", label: "Effect (MUSD)" },
     ],
     rows: [
       ...groupedRows(
@@ -547,11 +547,11 @@ export function computeBridge(
   // Consumo (aba Usage)
   tables.push({
     key: "usage",
-    title: "Consumo (Usage) — por linha",
+    title: "Usage — by line",
     columns: [
-      { key: "amt_b", label: "Montante origem (MUSD)" },
-      { key: "amt_t", label: "Montante destino (MUSD)" },
-      { key: "effect", label: "Efeito (MUSD)" },
+      { key: "amt_b", label: "Amount source (MUSD)" },
+      { key: "amt_t", label: "Amount target (MUSD)" },
+      { key: "effect", label: "Effect (MUSD)" },
     ],
     rows: [
       ...groupedRows(
@@ -578,15 +578,15 @@ export function computeBridge(
   // Câmbio (aba Forex)
   tables.push({
     key: "forex",
-    title: "Câmbio — composição do efeito",
+    title: "Forex — effect composition",
     columns: [
-      { key: "base", label: "Base destino (MUSD)" },
-      { key: "effect", label: "Efeito (MUSD)" },
+      { key: "base", label: "Base target (MUSD)" },
+      { key: "effect", label: "Effect (MUSD)" },
     ],
     rows: [
-      { label: "Receita mercado doméstico", kind: "row", values: [domRevT / K, fxRevenue / K] },
+      { label: "Domestic market revenue", kind: "row", values: [domRevT / K, fxRevenue / K] },
       {
-        label: "Custos (parcela doméstica)",
+        label: "Costs (domestic share)",
         kind: "row",
         values: [(ebitdaCostT * target.params.dmCostShare) / K, fxCost / K],
       },
@@ -596,8 +596,8 @@ export function computeBridge(
 
   // Estoque / Outros (aba SV-Others)
   const svGrouped = [
-    ...others.rows.map((r) => ({ ...r, group: r.group ?? "Outros" })),
-    ...stock.rows.map((r) => ({ ...r, group: r.group ?? "Variação de estoque" })),
+    ...others.rows.map((r) => ({ ...r, group: r.group ?? "Others" })),
+    ...stock.rows.map((r) => ({ ...r, group: r.group ?? "Stock variation" })),
   ];
   const svRows: BridgeTableRow[] = [
     ...groupedRows(
@@ -615,7 +615,7 @@ export function computeBridge(
       ? []
       : [
           {
-            label: "Variação de estoque — ajuste de fechamento",
+            label: "Stock variation — closing adjustment",
             kind: "row" as const,
             values: [null, null, (stockPlug - stock.total) / K],
           },
@@ -632,11 +632,11 @@ export function computeBridge(
   ];
   tables.push({
     key: "sv_others",
-    title: "Estoque / Outros — por linha",
+    title: "Stock / Others — by line",
     columns: [
-      { key: "amt_b", label: "Montante origem (MUSD)" },
-      { key: "amt_t", label: "Montante destino (MUSD)" },
-      { key: "effect", label: "Efeito (MUSD)" },
+      { key: "amt_b", label: "Amount source (MUSD)" },
+      { key: "amt_t", label: "Amount target (MUSD)" },
+      { key: "effect", label: "Effect (MUSD)" },
     ],
     rows: svRows,
   });
