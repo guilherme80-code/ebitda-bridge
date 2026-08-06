@@ -9,44 +9,53 @@
  */
 import { describe, it, expect } from "vitest";
 import { computeBridge } from "./bridge-calc";
-import { loadScenario } from "./seed-fixture";
+import { loadScenario, loadDerived } from "./seed-fixture";
 
-const source = loadScenario("fy26_fy_budget"); // FY26 Budget
-const target = loadScenario("fy26_fy_mrf7"); // FY26 MRF7
+// FY é derivado: soma dos 12 meses da versão (fonte mensal).
+const { data: source, monthIds: sourceMonths } = loadDerived("fy26_fy_budget");
+const { data: target, monthIds: targetMonths } = loadDerived("fy26_fy_mrf7");
 const bridge = computeBridge(source, target);
 
-// Valores de referência do Excel (MUSD), conferidos contra a aba Cálculo.
-const EXPECTED = {
-  start: 632.044044529875,
-  end: 747.6924008767779,
-  drivers: {
-    vol_mix: -6.680380721635167,
-    selling_price: 286.5489436934464,
-    input_price: -177.47194678166554,
-    usage: -12.829343372386798,
-    fixed_cost: -34.29055851516909,
-    forex: 70.57285860656948,
-    sv_others: -10.201216562256391,
-  },
-};
+const DRIVER_KEYS = [
+  "vol_mix",
+  "selling_price",
+  "input_price",
+  "usage",
+  "fixed_cost",
+  "forex",
+  "sv_others",
+];
 
-describe("computeBridge — FY26 Budget → FY26 MRF7 (regressão vs Excel)", () => {
-  it("start (EBITDA origem) bate com o Excel", () => {
-    expect(bridge.start).toBeCloseTo(EXPECTED.start, 6);
+describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)", () => {
+  const K = 1000;
+  const monthlyEbitda = (ids: string[]) =>
+    ids.reduce((s, id) => s + loadScenario(id).params.ebitdaKusd, 0) / K;
+
+  it("start (EBITDA origem) = soma dos 12 meses do Budget", () => {
+    expect(bridge.start).toBeCloseTo(monthlyEbitda(sourceMonths), 6);
   });
 
-  it("end (EBITDA destino) bate com o Excel", () => {
-    expect(bridge.end).toBeCloseTo(EXPECTED.end, 6);
+  it("end (EBITDA destino) = soma dos 12 meses do MRF7", () => {
+    expect(bridge.end).toBeCloseTo(monthlyEbitda(targetMonths), 6);
   });
 
   it("tem exatamente as alavancas esperadas", () => {
-    expect(Object.keys(bridge.drivers).sort()).toEqual(
-      Object.keys(EXPECTED.drivers).sort(),
-    );
+    expect(Object.keys(bridge.drivers).sort()).toEqual([...DRIVER_KEYS].sort());
   });
 
-  for (const [key, value] of Object.entries(EXPECTED.drivers)) {
-    it(`alavanca ${key} bate com o Excel`, () => {
+  // Regressão numérica: valores conferidos após a virada para fonte mensal
+  // (coincidem com a antiga referência do Excel, já que os meses somam o FY).
+  const EXPECTED_DRIVERS: Record<string, number> = {
+    vol_mix: -6.680380721635167,
+    selling_price: 286.54894369344686,
+    input_price: -177.47194678166514,
+    usage: -12.829343372386798,
+    fixed_cost: -34.29055851516902,
+    forex: 70.57285860656927,
+    sv_others: -10.20121656225709,
+  };
+  for (const [key, value] of Object.entries(EXPECTED_DRIVERS)) {
+    it(`alavanca ${key} bate com a referência`, () => {
       expect(bridge.drivers[key]).toBeCloseTo(value, 6);
     });
   }
@@ -54,6 +63,36 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (regressão vs Excel)", ()
   it("o bridge fecha: start + soma das alavancas = end", () => {
     const sum = Object.values(bridge.drivers).reduce((s, v) => s + v, 0);
     expect(bridge.start + sum).toBeCloseTo(bridge.end, 9);
+  });
+
+  it("quantidades consolidadas = soma das quantidades mensais (por produto)", () => {
+    const monthly = new Map<string, number>();
+    for (const id of sourceMonths) {
+      for (const s of loadScenario(id).sales) {
+        monthly.set(s.productKey, (monthly.get(s.productKey) ?? 0) + s.qtyKt);
+      }
+    }
+    for (const s of source.sales) {
+      expect(s.qtyKt).toBeCloseTo(monthly.get(s.productKey) ?? 0, 9);
+    }
+  });
+
+  it("trimestres também fecham (Q1 Budget → Q1 MRF7)", () => {
+    const q = computeBridge(
+      loadDerived("fy26_q1_budget").data,
+      loadDerived("fy26_q1_mrf7").data,
+    );
+    const sum = Object.values(q.drivers).reduce((s, v) => s + v, 0);
+    expect(q.start + sum).toBeCloseTo(q.end, 9);
+  });
+
+  it("mês contra mês também fecha (JAN Budget → JAN MRF7)", () => {
+    const m = computeBridge(
+      loadScenario("fy26_m01_budget"),
+      loadScenario("fy26_m01_mrf7"),
+    );
+    const sum = Object.values(m.drivers).reduce((s, v) => s + v, 0);
+    expect(m.start + sum).toBeCloseTo(m.end, 9);
   });
 });
 

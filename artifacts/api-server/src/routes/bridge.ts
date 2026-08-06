@@ -29,6 +29,7 @@ import {
   type Adjustment,
 } from "../lib/simulate";
 import { computeBridge, type RawScenarioData } from "../lib/bridge-calc";
+import { deriveScenarios, aggregateMonths, type DerivedScenario } from "../lib/aggregate";
 
 const router: IRouter = Router();
 
@@ -60,7 +61,20 @@ async function loadCatalog() {
   const withData = new Set(
     withParams.map((p) => p.scenarioId).filter((id) => salesIds.has(id)),
   );
-  return { scenarios, withData };
+
+  // A fonte é mensal; FY e trimestres são cenários DERIVADOS, consolidados
+  // dos meses da versão. Um derivado só tem dados quando todos os seus meses
+  // têm dados (nada de FY parcial fechado no plug).
+  const derived = deriveScenarios(scenarios.filter((s) => s.periodKind === "month"));
+  const derivedById = new Map<string, DerivedScenario>();
+  for (const d of derived) {
+    derivedById.set(d.id, d);
+    if (d.monthIds.every((id) => withData.has(id))) withData.add(d.id);
+  }
+  const all = [...derived, ...scenarios.filter((s) => s.periodKind === "month")].sort(
+    (a, b) => a.sortOrder - b.sortOrder,
+  );
+  return { scenarios: all, withData, derivedById };
 }
 
 function defaultPair(scenarios: Scenario[], withData: Set<string>) {
@@ -119,7 +133,7 @@ async function loadRaw(ids: string[]): Promise<Map<string, RawScenarioData>> {
  * brutos, seguindo as fórmulas da aba "Cálculo".
  */
 async function resolvePair(sourceId?: string, targetId?: string) {
-  const { scenarios, withData } = await loadCatalog();
+  const { scenarios, withData, derivedById } = await loadCatalog();
   const def = defaultPair(scenarios, withData);
   if (!def) return undefined;
 
@@ -140,13 +154,25 @@ async function resolvePair(sourceId?: string, targetId?: string) {
     return { kindMismatch: true as const };
   }
 
-  const raw = await loadRaw([source.id, target.id]);
-  const rawSource = raw.get(source.id);
-  const rawTarget = raw.get(target.id);
+  // Cenários derivados (FY/trimestre) carregam os meses e consolidam.
+  const monthIdsOf = (id: string) => derivedById.get(id)?.monthIds ?? [id];
+  const sourceMonths = monthIdsOf(source.id);
+  const targetMonths = monthIdsOf(target.id);
+  const raw = await loadRaw([...new Set([...sourceMonths, ...targetMonths])]);
+  const resolve = (id: string, monthIds: string[]) => {
+    const parts = monthIds.map((m) => raw.get(m));
+    if (parts.some((p) => !p)) return undefined;
+    const list = parts as RawScenarioData[];
+    return list.length === 1 && monthIds[0] === id
+      ? list[0]
+      : aggregateMonths(id, list);
+  };
+  const rawSource = resolve(source.id, sourceMonths);
+  const rawTarget = resolve(target.id, targetMonths);
   if (!rawSource || !rawTarget) return undefined;
 
   const bridge = computeBridge(rawSource, rawTarget);
-  return { source, target, bridge };
+  return { source, target, bridge, rawSource, rawTarget };
 }
 
 function bridgeTitle(source: Scenario, target: Scenario) {
@@ -326,9 +352,7 @@ router.post("/bridge/simulate", async (req, res): Promise<void> => {
     return;
   }
 
-  const raw = await loadRaw([pair.source.id, pair.target.id]);
-  const rawSource = raw.get(pair.source.id)!;
-  const rawTarget = raw.get(pair.target.id)!;
+  const { rawSource, rawTarget } = pair;
   const catalog = buildCatalog(rawSource, rawTarget);
 
   const system = `Você interpreta instruções de simulação ("what-if") de um bridge de EBITDA de uma siderúrgica e responde APENAS com JSON válido.

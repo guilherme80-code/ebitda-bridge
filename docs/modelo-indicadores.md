@@ -9,8 +9,8 @@ linha da aba).
 
 | Coluna      | Obrigatória | Descrição |
 |-------------|-------------|-----------|
-| `versao`    | sim | Versão do cenário: `BUDGET`, `MRF1` … `MRF7` |
-| `periodo`   | sim | Período: `FY26` (ano), `Q126`…`Q426` (trimestre), `JAN26`…`DEC26` (mês) |
+| `versao`    | sim | Versão do cenário: `ACTUAL`, `BUDGET`, `MRF1` … `MRF7` (`MRF01`…`MRF09` também são aceitos e normalizados) |
+| `periodo`   | sim | Período: sempre mensal, `JAN26`…`DEC26`. A fonte NÃO traz mais FY nem trimestres — o painel consolida FY e trimestres somando os meses da versão (câmbio, preços de insumos e participação de custo doméstico entram como médias ponderadas). FY/trimestre só aparecem no painel quando todos os meses do período têm dados |
 | `secao`     | sim | `Parametros` \| `Vendas` \| `CustoFixo` \| `Insumos` \| `Ajustes` |
 | `item`      | sim | Produto, categoria de custo, insumo ou rótulo do ajuste (`Global` em Parametros) |
 | `indicador` | sim | Nome do indicador (lista abaixo, por seção) |

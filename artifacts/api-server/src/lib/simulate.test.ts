@@ -17,10 +17,11 @@ import {
   buildCatalog,
   type Adjustment,
 } from "./simulate";
-import { loadScenario } from "./seed-fixture";
+import { loadDerived } from "./seed-fixture";
 
-const source = loadScenario("fy26_fy_budget"); // FY26 Budget
-const target = loadScenario("fy26_fy_mrf7"); // FY26 MRF7
+// FY é derivado: consolidação dos 12 meses da versão (fonte mensal).
+const source = loadDerived("fy26_fy_budget").data; // FY26 Budget
+const target = loadDerived("fy26_fy_mrf7").data; // FY26 MRF7
 const base = computeBridge(source, target);
 
 function simulate(adjustments: Adjustment[]) {

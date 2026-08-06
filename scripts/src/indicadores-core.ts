@@ -27,7 +27,17 @@ import {
 } from "@workspace/db";
 
 export const COLUNAS = ["versao", "periodo", "secao", "item", "indicador", "valor"] as const;
-const VERSIONS = ["BUDGET", "MRF1", "MRF2", "MRF3", "MRF4", "MRF5", "MRF6", "MRF7"];
+const VERSIONS = [
+  "ACTUAL",
+  "BUDGET",
+  "MRF1",
+  "MRF2",
+  "MRF3",
+  "MRF4",
+  "MRF5",
+  "MRF6",
+  "MRF7",
+];
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 const INDICADORES: Record<string, Set<string>> = {
@@ -89,29 +99,20 @@ function scenarioMeta(
   linha: number,
   erro: ReturnType<typeof fazErro>,
 ) {
-  const vi = VERSIONS.indexOf(versao);
+  // MRF01..MRF09 são normalizados para MRF1..MRF9 (mesma convenção de ids).
+  const canonica = versao.replace(/^MRF0(\d)$/, "MRF$1");
+  const vi = VERSIONS.indexOf(canonica);
   if (vi < 0) erro(linha, `versao desconhecida: "${versao}" (esperado ${VERSIONS.join(", ")})`);
-  const vSlug = versao.toLowerCase();
-  const vLabel = versao === "BUDGET" ? "Budget" : versao;
+  const vSlug = canonica.toLowerCase();
+  const vLabel =
+    canonica === "BUDGET" ? "Budget" : canonica === "ACTUAL" ? "Actual" : canonica;
 
-  let m: RegExpMatchArray | null;
-  if ((m = periodo.match(/^FY(\d{2})$/))) {
-    const yy = m[1];
-    return {
-      id: `fy${yy}_fy_${vSlug}`,
-      periodKind: "year",
-      label: `FY${yy} ${vLabel}`,
-      sortOrder: vi,
-    };
-  }
-  if ((m = periodo.match(/^Q([1-4])(\d{2})$/))) {
-    const q = Number(m[1]);
-    return {
-      id: `fy${m[2]}_q${q}_${vSlug}`,
-      periodKind: "quarter",
-      label: `${periodo} ${vLabel}`,
-      sortOrder: 1000 + (vi + 1) * 10 + (q - 1),
-    };
+  if (/^FY\d{2}$/.test(periodo) || /^Q[1-4]\d{2}$/.test(periodo)) {
+    erro(
+      linha,
+      `periodo "${periodo}" não é mais aceito: a fonte é mensal (JAN26..DEC26). ` +
+        `FY e trimestres são consolidados pelo painel a partir dos meses`,
+    );
   }
   const mi = MONTHS.indexOf(periodo.slice(0, 3));
   if (mi >= 0 && /^\d{2}$/.test(periodo.slice(3))) {
@@ -119,10 +120,11 @@ function scenarioMeta(
       id: `fy${periodo.slice(3)}_m${String(mi + 1).padStart(2, "0")}_${vSlug}`,
       periodKind: "month",
       label: `${periodo} ${vLabel}`,
+      versao: canonica,
       sortOrder: 10000 + (vi + 1) * 100 + mi,
     };
   }
-  erro(linha, `periodo desconhecido: "${periodo}" (esperado FY26, Q126..Q426 ou JAN26..DEC26)`);
+  erro(linha, `periodo desconhecido: "${periodo}" (esperado JAN26..DEC26)`);
 }
 
 /**
@@ -232,7 +234,7 @@ export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
   for (const g of grupos.values()) {
     scenarios.push({
       id: g.meta.id,
-      version: g.versao,
+      version: g.meta.versao,
       period: g.periodo,
       periodKind: g.meta.periodKind,
       label: g.meta.label,
@@ -380,6 +382,42 @@ export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
         sortOrder: a.ordem,
       });
     }
+  }
+
+  // ---------- consistência entre meses da mesma versão ----------
+  // A fonte é mensal e o painel consolida FY/trimestre somando os meses.
+  // A classificação de um item não pode mudar de um mês para outro — senão a
+  // consolidação atribuiria câmbio/moeda/formato errados ao período inteiro.
+  const versaoAno = (scenarioId: string) => scenarioId.replace(/_m\d{2}_/, "|");
+  const conflito = (tipo: string, chave: string, o: string, n: string) => {
+    throw new Error(
+      `${tipo} "${chave}" com classificação inconsistente entre meses da mesma versão ` +
+        `(${o} ≠ ${n}). A classificação deve ser igual em todos os meses.`,
+    );
+  };
+  const vistoSales = new Map<string, string>();
+  for (const s of sales) {
+    const k = `${versaoAno(s.scenarioId)}|${s.productKey}`;
+    const assinatura = `moeda=${s.currency}/atributo=${s.domestic ? "interno" : "externo"}/grupo=${s.groupLabel ?? ""}`;
+    const prev = vistoSales.get(k);
+    if (prev === undefined) vistoSales.set(k, assinatura);
+    else if (prev !== assinatura) conflito("produto", s.label, prev, assinatura);
+  }
+  const vistoFixed = new Map<string, string>();
+  for (const f of fixed) {
+    const k = `${versaoAno(f.scenarioId)}|${f.category}`;
+    const assinatura = `moeda=${f.usdDenominated ? "USD" : "BRL"}/grupo=${f.groupLabel ?? ""}`;
+    const prev = vistoFixed.get(k);
+    if (prev === undefined) vistoFixed.set(k, assinatura);
+    else if (prev !== assinatura) conflito("categoria de custo fixo", f.category, prev, assinatura);
+  }
+  const vistoInputs = new Map<string, string>();
+  for (const i of inputs) {
+    const k = `${versaoAno(i.scenarioId)}|${i.item}`;
+    const assinatura = `formato=${i.unitPriceUsd != null ? "preco_usd_t" : "montante_kusd"}/grupo=${i.groupLabel ?? ""}`;
+    const prev = vistoInputs.get(k);
+    if (prev === undefined) vistoInputs.set(k, assinatura);
+    else if (prev !== assinatura) conflito("insumo", i.item, prev, assinatura);
   }
 
   return { scenarios, params, sales, fixed, inputs, misc };
