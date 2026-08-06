@@ -151,6 +151,78 @@ describe("caso representativo — volume de Slab Calvert +10% no MRF7", () => {
   });
 });
 
+describe("simulação — linha ajustada dentro de grupo e pareamento", () => {
+  const outcome = simulate([
+    { scope: "sales_qty", scenario: "target", key: "Slab Calvert", pct: 10 },
+  ]);
+  const tables = buildSimulatedTables(outcome.bridge, base);
+  const sales = tables.find((t) => t.key === "sales")!;
+  const col = (key: string) => sales.columns.findIndex((c) => c.key === key);
+
+  it("a linha ajustada pertence a um grupo e continua presente na tabela", () => {
+    const row = sales.rows.find(
+      (r) => r.label === "Slab Calvert" && r.kind === "row",
+    )!;
+    expect(row).toBeDefined();
+    expect(row.group).not.toBeNull();
+  });
+
+  it("o subtotal do grupo da linha ajustada é marcado como alterado", () => {
+    const row = sales.rows.find(
+      (r) => r.label === "Slab Calvert" && r.kind === "row",
+    )!;
+    const subtotal = sales.rows.find(
+      (r) => r.kind === "subtotal" && r.group === row.group,
+    )!;
+    expect(subtotal).toBeDefined();
+    expect(subtotal.changed[col("qty_t")]).toBe(true);
+    expect(subtotal.changed[col("qty_var")]).toBe(true);
+    expect(subtotal.changed[col("qty_b")]).toBe(false);
+  });
+
+  it("subtotais de outros grupos não são marcados nas colunas de quantidade", () => {
+    const row = sales.rows.find(
+      (r) => r.label === "Slab Calvert" && r.kind === "row",
+    )!;
+    for (const sub of sales.rows.filter((r) => r.kind === "subtotal")) {
+      if (sub.group === row.group) continue;
+      expect(sub.changed[col("qty_b")]).toBe(false);
+      expect(sub.changed[col("qty_t")]).toBe(false);
+      expect(sub.changed[col("qty_var")]).toBe(false);
+    }
+  });
+
+  it("no bridge simulado, subtotal de grupo = soma das linhas-filhas", () => {
+    for (const table of tables) {
+      const details = table.rows.filter((r) => r.kind === "row");
+      for (const sub of table.rows.filter((r) => r.kind === "subtotal")) {
+        const members = details.filter((r) => r.group === sub.group);
+        expect(members.length).toBeGreaterThan(0);
+        sub.values.forEach((v, j) => {
+          if (v == null) return;
+          const sum = members.reduce((s, r) => s + (r.values[j] ?? 0), 0);
+          expect(v).toBeCloseTo(sum, 9);
+        });
+      }
+    }
+  });
+
+  it("pareamento por label+kind+índice: baseValues vem da linha base na mesma posição", () => {
+    for (const table of tables) {
+      const baseTable = base.tables.find((t) => t.key === table.key)!;
+      table.rows.forEach((row, i) => {
+        const baseRow = baseTable.rows[i];
+        // estrutura preservada: mesma posição, mesmo label e kind
+        expect(baseRow.label).toBe(row.label);
+        expect(baseRow.kind).toBe(row.kind);
+        expect(row.baseValues).toEqual(
+          row.values.map((_, j) => baseRow.values[j] ?? null),
+        );
+      });
+    }
+  });
+});
+
 describe("regressões estruturais do contrato simulado", () => {
   it("o catálogo contém o item usado no caso representativo", () => {
     const catalog = buildCatalog(source, target);
