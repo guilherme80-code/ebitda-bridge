@@ -3,29 +3,42 @@ import type { BridgeStep } from '@workspace/api-client-react';
 /** Resíduos menores que isso (MUSD) são tratados como "tudo explicado". */
 export const UNEXPLAINED_EPS = 0.05;
 
+/** Chave do passo de residual/plug ("Estoque / Outros") no bridge. */
+export const RESIDUAL_STEP_KEY = 'sv_others';
+
+/**
+ * Residual a explicar da série: o valor do passo "Estoque / Outros"
+ * (variação total − alavancas nomeadas). Retorna undefined se o passo não
+ * existir na série.
+ */
+export function residualToExplain(steps: BridgeStep[]): number | undefined {
+  const plug = steps.find((s) => s.key === RESIDUAL_STEP_KEY);
+  return plug?.value;
+}
+
 /**
  * Insere a coluna "Não Explicado" imediatamente antes do EBITDA destino
- * (passo total_end). O resíduo é calculado a partir dos totais DA PRÓPRIA
- * série (original ou simulada), descontando a soma das explicações
+ * (passo total_end). A base é o residual das alavancas nomeadas DA PRÓPRIA
+ * série (o valor de "Estoque / Outros"), descontando a soma das explicações
  * registradas — que não variam com a simulação:
- *   resíduo    = (destino − origem) − explicado
+ *   resíduo    = residual (Estoque / Outros) − explicado
  *   cumulative = EBITDA destino da série
  *   value      = resíduo
- *   início     = cumulative − value = origem + explicado
- * Sem explicações, a barra cobre toda a variação (origem → destino); quando
- * o resíduo é ~zero, a coluna não aparece. `explainedTotal === undefined`
- * (explicações ainda não carregadas) também omite a coluna.
+ *   início     = cumulative − value
+ * Quando o resíduo é ~zero, a coluna não aparece. `explainedTotal ===
+ * undefined` (explicações ainda não carregadas) ou série sem o passo de
+ * residual também omitem a coluna.
  */
 export function insertUnexplainedStep(
   steps: BridgeStep[],
   explainedTotal: number | undefined,
 ): BridgeStep[] {
   if (explainedTotal === undefined) return steps;
-  const start = steps.find((s) => s.kind === 'total_start');
+  const residual = residualToExplain(steps);
   const endIdx = steps.findIndex((s) => s.kind === 'total_end');
-  if (!start || endIdx < 0) return steps;
+  if (residual === undefined || endIdx < 0) return steps;
   const end = steps[endIdx];
-  const unexplained = end.value - start.value - explainedTotal;
+  const unexplained = residual - explainedTotal;
   if (Math.abs(unexplained) < UNEXPLAINED_EPS) return steps;
   const step: BridgeStep = {
     key: 'unexplained',

@@ -227,10 +227,10 @@ export function WaterfallChart({ steps, baseSteps, explainedTotal, onBarClick }:
     if (!steps || steps.length === 0) return [];
     const compare = !!baseSteps && baseSteps.length > 0;
 
-    // Coluna "Não Explicado": parte da variação ainda não coberta pelas
-    // explicações registradas. Fica ANTES do EBITDA destino e some quando o
-    // resíduo é ~zero. Cada série (original/simulada) calcula seu próprio
-    // resíduo a partir dos seus totais; as explicações são as mesmas.
+    // Coluna "Não Explicado": residual das alavancas nomeadas (Estoque /
+    // Outros) ainda não coberto pelas explicações registradas. Fica ANTES do
+    // EBITDA destino e some quando o resíduo é ~zero. Cada série
+    // (original/simulada) usa o residual dos seus próprios passos.
     const steps_ = insertUnexplainedStep(steps, explainedTotal);
     const baseSteps_ = baseSteps ? insertUnexplainedStep(baseSteps, explainedTotal) : baseSteps;
     const baseByKey = new Map((baseSteps_ ?? []).map((s) => [s.key, s]));

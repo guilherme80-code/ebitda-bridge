@@ -14,11 +14,14 @@ interface ExplanationsPanelProps {
   sourceId: string | null;
   targetId: string | null;
   enabled: boolean;
-  /** Variação total (destino − origem) em MUSD, para referência do usuário. */
-  variation?: number;
+  /**
+   * Residual a explicar (valor de "Estoque / Outros" = variação total menos
+   * as alavancas nomeadas), em MUSD.
+   */
+  residual?: number;
 }
 
-export function ExplanationsPanel({ sourceId, targetId, enabled, variation }: ExplanationsPanelProps) {
+export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: ExplanationsPanelProps) {
   const queryClient = useQueryClient();
   const params = sourceId && targetId ? { source: sourceId, target: targetId } : undefined;
   const { data, isLoading } = useListBridgeExplanations(params, {
@@ -77,14 +80,14 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, variation }: Ex
             Explicações da Variação
           </h2>
           <p className="text-sm font-medium text-slate-500 mt-1">
-            Registre o valor e a explicação das diferenças entre o EBITDA de origem e destino. As explicações ficam salvas para quem consultar esta combinação no futuro.
+            Registre o valor e a explicação do residual que não está nas alavancas nomeadas (Estoque / Outros). As explicações ficam salvas para quem consultar esta combinação no futuro.
           </p>
         </div>
-        {typeof variation === 'number' && (
+        {typeof residual === 'number' && (
           <div className="mt-3 sm:mt-0 text-sm font-semibold text-slate-600 whitespace-nowrap" data-testid="text-variation-summary">
-            Variação total:{' '}
-            <span className={cn('font-mono font-bold', variation >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
-              {variation > 0 ? '+' : ''}{formatMUSD(variation)} MUSD
+            Residual a explicar:{' '}
+            <span className={cn('font-mono font-bold', residual >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+              {residual > 0 ? '+' : ''}{formatMUSD(residual)} MUSD
             </span>
             {explanations.length > 0 && (
               <span className="ml-3 text-slate-500">
