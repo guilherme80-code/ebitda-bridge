@@ -351,6 +351,24 @@ export function computeBridge(
     others.total;
   const stockPlug = end - start - beforePlug; // garante fechamento exato
   const svOthers = others.total + stockPlug;
+  // Quando os dados trazem Stock Variation, "Estoque" mostra o valor real e
+  // "Outros" fica só com a diferença de fechamento restante.
+  const hasStockData =
+    source.misc.some((m) => m.driver === "stock_variation") ||
+    target.misc.some((m) => m.driver === "stock_variation");
+  const othersResidual = svOthers - stock.total; // = others.total + (stockPlug − stock.total)
+  const stockDetail: DetailLine[] = stock.lines.filter(
+    (l) => Math.abs(l.value) > 1e-9,
+  );
+  const othersDetail: DetailLine[] = [
+    ...others.lines.map((l) => ({ ...l, group: "Outros" })),
+    {
+      label: "Ajuste de fechamento",
+      group: "Fechamento",
+      value: (stockPlug - stock.total) / K,
+      sortOrder: 999,
+    },
+  ].filter((l) => Math.abs(l.value) > 1e-9);
   const svDetail: DetailLine[] = [
     ...others.lines.map((l) => ({ ...l, group: "Outros" })),
     ...stock.lines.map((l, i) => ({
@@ -619,7 +637,8 @@ export function computeBridge(
       usage: usage.total / K,
       fixed_cost: fixedCost / K,
       forex: forex / K,
-      sv_others: svOthers / K,
+      ...(hasStockData ? { stock: stock.total / K } : {}),
+      sv_others: (hasStockData ? othersResidual : svOthers) / K,
     },
     details: {
       vol_mix: volMixDetail,
@@ -628,7 +647,8 @@ export function computeBridge(
       usage: usage.lines,
       fixed_cost: fixedDetail,
       forex: forexDetail,
-      sv_others: svDetail,
+      ...(hasStockData ? { stock: stockDetail } : {}),
+      sv_others: hasStockData ? othersDetail : svDetail,
     },
     tables,
   };

@@ -23,6 +23,7 @@ const DRIVER_KEYS = [
   "usage",
   "fixed_cost",
   "forex",
+  "stock",
   "sv_others",
 ];
 
@@ -52,8 +53,42 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)
     usage: -12.829343372386798,
     fixed_cost: -34.29055851516902,
     forex: 70.57285860656927,
-    sv_others: -10.20121656225709,
+    // O seed traz Stock Variation: "Estoque" recebe o valor real dos dados e
+    // "Outros" (sv_others) fica só com a diferença de fechamento restante.
+    // A soma dos dois é o antigo plug único (-10.20121656225709).
+    stock: -3.860422459599194,
+    sv_others: -6.340794102657895,
   };
+
+  it("Estoque + Outros = antigo plug único (Estoque / Outros)", () => {
+    expect(
+      (bridge.drivers["stock"] ?? 0) + (bridge.drivers["sv_others"] ?? 0),
+    ).toBeCloseTo(-10.20121656225709, 6);
+  });
+
+  it("Estoque bate com a diferença das linhas de Stock Variation dos dados", () => {
+    const sumStock = (d: typeof source) =>
+      d.misc
+        .filter((m) => m.driver === "stock_variation")
+        .reduce((s, m) => s + m.amountKusd, 0);
+    expect(bridge.drivers["stock"]).toBeCloseTo(
+      (sumStock(target) - sumStock(source)) / 1000,
+      9,
+    );
+  });
+
+  it("sem Stock Variation nos dados, volta ao plug único sv_others", () => {
+    const strip = (d: typeof source) => ({
+      ...d,
+      misc: d.misc.filter((m) => m.driver !== "stock_variation"),
+    });
+    const b = computeBridge(strip(source), strip(target));
+    expect(Object.keys(b.drivers)).not.toContain("stock");
+    // O plug absorve o que antes era explicado pelas linhas de estoque.
+    expect(b.drivers["sv_others"]).toBeCloseTo(-10.20121656225709, 6);
+    const sum = Object.values(b.drivers).reduce((s, v) => s + v, 0);
+    expect(b.start + sum).toBeCloseTo(b.end, 9);
+  });
   for (const [key, value] of Object.entries(EXPECTED_DRIVERS)) {
     it(`alavanca ${key} bate com a referência`, () => {
       expect(bridge.drivers[key]).toBeCloseTo(value, 6);

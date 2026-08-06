@@ -15,8 +15,9 @@ interface ExplanationsPanelProps {
   targetId: string | null;
   enabled: boolean;
   /**
-   * Residual a explicar (valor de "Estoque / Outros" = variação total menos
-   * as alavancas nomeadas), em MUSD.
+   * Residual a explicar (valor do passo de plug "Outros" — ou
+   * "Estoque / Outros" quando não há Stock Variation nos dados —, isto é,
+   * a variação total menos as alavancas nomeadas), em MUSD.
    */
   residual?: number;
 }
@@ -80,7 +81,7 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
             Explicações da Variação
           </h2>
           <p className="text-sm font-medium text-slate-500 mt-1">
-            Registre o valor e a explicação do residual que não está nas alavancas nomeadas (Estoque / Outros). As explicações ficam salvas para quem consultar esta combinação no futuro.
+            Registre o valor e a explicação do residual que não está nas alavancas nomeadas (Outros). As explicações ficam salvas para quem consultar esta combinação no futuro.
           </p>
         </div>
         {typeof residual === 'number' && (

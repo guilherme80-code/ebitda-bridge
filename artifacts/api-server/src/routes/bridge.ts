@@ -9,8 +9,23 @@ import {
   inputPriceFactsTable,
   miscFactsTable,
   BRIDGE_DRIVERS,
+  OTHERS_ONLY_LABEL,
   type Scenario,
 } from "@workspace/db";
+
+/**
+ * Alavancas a exibir para um bridge: "Estoque" só aparece quando os dados
+ * trouxeram Stock Variation (chave "stock" presente em drivers); nesse caso
+ * o plug "sv_others" passa a se chamar apenas "Outros".
+ */
+function bridgeDriverList(
+  drivers: Record<string, number>,
+): { key: string; label: string }[] {
+  const hasStock = "stock" in drivers;
+  return BRIDGE_DRIVERS.filter((d) => d.key !== "stock" || hasStock).map((d) =>
+    hasStock && d.key === "sv_others" ? { key: d.key, label: OTHERS_ONLY_LABEL } : d,
+  );
+}
 import {
   GetBridgeResponse,
   GetBridgeComponentParams,
@@ -258,7 +273,7 @@ router.get("/bridge", async (req, res): Promise<void> => {
       kind: "total_start",
       hasDetail: false,
     },
-    ...BRIDGE_DRIVERS.map((d) => {
+    ...bridgeDriverList(drivers).map((d) => {
       const value = drivers[d.key] ?? 0;
       cumulative += value;
       return {
@@ -309,7 +324,9 @@ router.get("/bridge/components/:key", async (req, res): Promise<void> => {
     return;
   }
 
-  const driver = BRIDGE_DRIVERS.find((d) => d.key === params.data.key);
+  const driver = bridgeDriverList(pair.bridge.drivers).find(
+    (d) => d.key === params.data.key,
+  );
   if (!driver) {
     res.status(404).json({ error: "Componente não encontrado" });
     return;
@@ -457,7 +474,7 @@ Regras:
       kind: "total_start",
       hasDetail: false,
     },
-    ...BRIDGE_DRIVERS.map((d) => {
+    ...bridgeDriverList(drivers).map((d) => {
       const value = drivers[d.key] ?? 0;
       cumulative += value;
       return {
@@ -542,7 +559,7 @@ router.get("/bridge/summary", async (req, res): Promise<void> => {
   }
 
   const { start, end, drivers } = pair.bridge;
-  const deltas = BRIDGE_DRIVERS.map((d) => ({
+  const deltas = bridgeDriverList(drivers).map((d) => ({
     key: d.key,
     label: d.label,
     value: drivers[d.key] ?? 0,
