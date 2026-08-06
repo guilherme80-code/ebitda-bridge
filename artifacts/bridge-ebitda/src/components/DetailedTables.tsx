@@ -90,11 +90,11 @@ export function DetailedTables({
             <table className="w-full text-sm" data-testid={`table-${table.key}`}>
               <thead>
                 <tr className="bg-slate-50 text-slate-500">
-                  <th className="text-left font-semibold px-5 py-2.5 whitespace-nowrap sticky left-0 bg-slate-50">
+                  <th className="text-left font-semibold px-5 py-2.5 align-bottom sticky left-0 bg-slate-50">
                     Line
                   </th>
                   {table.columns.map((c) => (
-                    <th key={c.key} className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">
+                    <th key={c.key} className="text-right font-semibold px-3 py-2.5 align-bottom max-w-[110px] whitespace-normal break-words leading-snug">
                       {c.label}
                     </th>
                   ))}

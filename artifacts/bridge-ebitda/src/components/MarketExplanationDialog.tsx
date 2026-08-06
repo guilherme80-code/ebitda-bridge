@@ -89,18 +89,18 @@ export function MarketExplanationDialog({
           <table className="w-full text-sm" data-testid="table-market-explanation">
             <thead>
               <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                <th className="text-left font-semibold px-6 py-2.5 whitespace-nowrap">
+                <th className="text-left font-semibold px-6 py-2.5 align-bottom">
                   {explanation.unitLabel}
                 </th>
-                <th className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">
+                <th className="text-right font-semibold px-4 py-2.5 align-bottom max-w-[110px] whitespace-normal break-words leading-snug">
                   {sourceLabel ?? 'Source'}
                 </th>
-                <th className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">
+                <th className="text-right font-semibold px-4 py-2.5 align-bottom max-w-[110px] whitespace-normal break-words leading-snug">
                   {targetLabel ?? 'Target'}
                 </th>
-                <th className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">Var</th>
-                <th className="text-right font-semibold px-4 py-2.5 whitespace-nowrap">kt</th>
-                <th className="text-right font-semibold px-6 py-2.5 whitespace-nowrap">$m</th>
+                <th className="text-right font-semibold px-4 py-2.5 align-bottom">Var</th>
+                <th className="text-right font-semibold px-4 py-2.5 align-bottom">kt</th>
+                <th className="text-right font-semibold px-6 py-2.5 align-bottom">$m</th>
               </tr>
             </thead>
             <tbody>
