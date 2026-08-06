@@ -224,6 +224,11 @@ components:
         hasData:
           type: boolean
           description: Whether imported data exists for this version. Versions without data cannot be compared yet.
+        missingMonths:
+          type: array
+          items:
+            type: string
+          description: For derived year/quarter scenarios without data, the month periods (e.g. FEB26) still missing before the period can be consolidated. Omitted when the scenario has data.
       required: [id, version, period, periodKind, label, hasData]
     ScenarioPair:
       type: object

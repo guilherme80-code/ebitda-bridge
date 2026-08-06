@@ -204,7 +204,7 @@ describe("deriveScenarios", () => {
     sortOrder: 10000 + (vi + 1) * 100 + (mm - 1),
   });
 
-  it("deriva FY e trimestres apenas quando todos os meses existem", () => {
+  it("deriva FY e trimestres com todos os meses esperados", () => {
     const months = Array.from({ length: 12 }, (_, i) => mk(i + 1, 1, "budget", "Budget"));
     const derived = deriveScenarios(months);
     expect(derived.map((d) => d.id)).toEqual([
@@ -217,12 +217,14 @@ describe("deriveScenarios", () => {
     expect(derived[0].sortOrder).toBe(1); // vi reconstruído da ordenação mensal
     expect(derived[0].monthIds).toHaveLength(12);
 
-    // Faltando dezembro: sem FY nem Q4, mas Q1..Q3 continuam
+    // Com meses faltando, os derivados continuam listados — monthIds sempre
+    // traz os meses ESPERADOS; quem marca "sem dados" é o catálogo.
     const partial = deriveScenarios(months.slice(0, 11));
-    expect(partial.map((d) => d.id)).toEqual([
-      "fy26_q1_budget",
-      "fy26_q2_budget",
-      "fy26_q3_budget",
+    expect(partial.map((d) => d.id)).toContain("fy26_fy_budget");
+    expect(partial.find((d) => d.id === "fy26_q4_budget")?.monthIds).toEqual([
+      "fy26_m10_budget",
+      "fy26_m11_budget",
+      "fy26_m12_budget",
     ]);
   });
 });

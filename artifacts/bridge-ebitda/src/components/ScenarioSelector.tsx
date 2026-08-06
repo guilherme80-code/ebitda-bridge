@@ -39,21 +39,41 @@ function ScenarioPicker({
     const exact = scenarios.find(
       (s) => s.version === version && s.period === period,
     );
-    if (exact) {
+    if (exact?.hasData) {
       onSelect(exact.id);
       return;
     }
-    // A combinação exata não existe — usa o primeiro cenário compatível com o
-    // campo que o usuário acabou de alterar.
-    const fallback =
+    // A combinação exata não existe ou está incompleta (FY/trimestre sem
+    // todos os meses) — usa o primeiro cenário COM DADOS compatível com o
+    // campo que o usuário acabou de alterar, preferindo o mesmo tipo de
+    // período (ano/trimestre/mês).
+    const kind = exact?.periodKind ?? selected?.periodKind;
+    const candidates =
       changed === 'version'
-        ? scenarios.find((s) => s.version === version)
-        : scenarios.find((s) => s.period === period);
+        ? scenarios.filter((s) => s.version === version && s.hasData)
+        : scenarios.filter((s) => s.period === period && s.hasData);
+    const fallback =
+      candidates.find((s) => s.periodKind === kind) ?? candidates[0];
     if (fallback) onSelect(fallback.id);
   };
 
   const versionHasData = (version: string) =>
     scenarios.some((s) => s.version === version && s.hasData);
+
+  // Para a versão selecionada: um período derivado (ano/trimestre) pode não
+  // ter todos os meses consolidados — mostramos desabilitado com a dica.
+  const periodInfo = (period: string) => {
+    const s = scenarios.find(
+      (sc) => sc.version === (selected?.version ?? '') && sc.period === period,
+    );
+    if (!s) return { disabled: false, hint: '' };
+    if (s.hasData) return { disabled: false, hint: '' };
+    const missing = s.missingMonths ?? [];
+    if (missing.length === 0) return { disabled: true, hint: ' (sem dados)' };
+    const shown = missing.slice(0, 3).join(', ');
+    const rest = missing.length > 3 ? ` +${missing.length - 3}` : '';
+    return { disabled: true, hint: ` (faltam ${shown}${rest})` };
+  };
 
   return (
     <div className="flex-1 bg-white border border-slate-200 shadow-sm px-4 py-3">
@@ -90,11 +110,24 @@ function ScenarioPicker({
               <optgroup key={k} label={KIND_LABEL[k] ?? k}>
                 {periods
                   .filter((p) => p.periodKind === k)
-                  .map((p) => (
-                    <option key={p.period} value={p.period}>
-                      {p.period}
-                    </option>
-                  ))}
+                  .map((p) => {
+                    const info = periodInfo(p.period);
+                    return (
+                      <option
+                        key={p.period}
+                        value={p.period}
+                        disabled={info.disabled}
+                        title={
+                          info.disabled
+                            ? `Período incompleto — importe os meses faltantes para consolidar${info.hint}`
+                            : undefined
+                        }
+                      >
+                        {p.period}
+                        {info.hint}
+                      </option>
+                    );
+                  })}
               </optgroup>
             ))}
           </select>

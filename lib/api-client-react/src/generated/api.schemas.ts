@@ -33,6 +33,8 @@ export interface Scenario {
   label: string;
   /** Whether imported data exists for this version. Versions without data cannot be compared yet. */
   hasData: boolean;
+  /** For derived year/quarter scenarios without data, the month periods (e.g. FEB26) still missing before the period can be consolidated. Omitted when the scenario has data. */
+  missingMonths?: string[];
 }
 
 /**

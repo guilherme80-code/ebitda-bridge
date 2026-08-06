@@ -29,7 +29,12 @@ import {
   type Adjustment,
 } from "../lib/simulate";
 import { computeBridge, type RawScenarioData } from "../lib/bridge-calc";
-import { deriveScenarios, aggregateMonths, type DerivedScenario } from "../lib/aggregate";
+import {
+  deriveScenarios,
+  aggregateMonths,
+  monthPeriodLabel,
+  type DerivedScenario,
+} from "../lib/aggregate";
 
 const router: IRouter = Router();
 
@@ -195,7 +200,7 @@ function scenarioColumns<T extends { key: string; label: string }>(
 }
 
 router.get("/scenarios", async (_req, res): Promise<void> => {
-  const { scenarios, withData } = await loadCatalog();
+  const { scenarios, withData, derivedById } = await loadCatalog();
   const def = defaultPair(scenarios, withData);
   if (!def) {
     res.status(404).json({ error: "Nenhum dado de cenário importado" });
@@ -203,14 +208,26 @@ router.get("/scenarios", async (_req, res): Promise<void> => {
   }
   res.json(
     ListScenariosResponse.parse({
-      scenarios: scenarios.map((s) => ({
-        id: s.id,
-        version: s.version,
-        period: s.period,
-        periodKind: s.periodKind,
-        label: s.label,
-        hasData: withData.has(s.id),
-      })),
+      scenarios: scenarios.map((s) => {
+        const hasData = withData.has(s.id);
+        const derived = derivedById.get(s.id);
+        // Derivado sem dados: informa quais meses faltam para consolidar.
+        const missingMonths =
+          !hasData && derived
+            ? derived.monthIds
+                .filter((id) => !withData.has(id))
+                .map(monthPeriodLabel)
+            : undefined;
+        return {
+          id: s.id,
+          version: s.version,
+          period: s.period,
+          periodKind: s.periodKind,
+          label: s.label,
+          hasData,
+          ...(missingMonths ? { missingMonths } : {}),
+        };
+      }),
       defaultPair: def,
     }),
   );

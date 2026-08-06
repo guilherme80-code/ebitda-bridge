@@ -29,8 +29,20 @@ const QUARTER_MONTHS: Record<number, number[]> = {
 const MONTH_ID = /^fy(\d{2})_m(\d{2})_(.+)$/;
 
 export interface DerivedScenario extends Scenario {
-  /** ids dos cenários mensais que compõem o derivado, em ordem */
+  /** ids dos cenários mensais que compõem o derivado, em ordem (todos os esperados) */
   monthIds: string[];
+}
+
+const MONTH_NAMES = [
+  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+];
+
+/** Rótulo de período mensal (ex.: fy26_m02_budget → "FEB26"). */
+export function monthPeriodLabel(monthId: string): string {
+  const p = parseMonthId(monthId);
+  if (!p) return monthId;
+  return `${MONTH_NAMES[p.month - 1]}${p.yy}`;
 }
 
 /** Extrai {yy, month, versionSlug} de um id mensal (fy26_m01_budget). */
@@ -68,21 +80,21 @@ export function deriveScenarios(monthly: Scenario[]): DerivedScenario[] {
     const vi = Math.round((anyMonth.sortOrder - 10000 - mi) / 100) - 1;
     const vLabel = anyMonth.label.replace(/^\S+\s*/, ""); // "JAN26 Budget" → "Budget"
 
-    const fyMonths = Array.from({ length: 12 }, (_, i) => b.byMonth.get(i + 1));
-    if (fyMonths.every((m): m is Scenario => !!m)) {
-      out.push({
-        id: `fy${b.yy}_fy_${b.vSlug}`,
-        version: b.version,
-        period: `FY${b.yy}`,
-        periodKind: "year",
-        label: `FY${b.yy} ${vLabel}`,
-        sortOrder: vi,
-        monthIds: fyMonths.map((m) => m.id),
-      });
-    }
+    // Emite o derivado mesmo com meses faltando — quem decide se ele "tem
+    // dados" é o catálogo (todos os meses presentes E com dados). Assim o
+    // seletor pode mostrar o período desabilitado com os meses faltantes.
+    const monthId = (mm: number) =>
+      `fy${b.yy}_m${String(mm).padStart(2, "0")}_${b.vSlug}`;
+    out.push({
+      id: `fy${b.yy}_fy_${b.vSlug}`,
+      version: b.version,
+      period: `FY${b.yy}`,
+      periodKind: "year",
+      label: `FY${b.yy} ${vLabel}`,
+      sortOrder: vi,
+      monthIds: Array.from({ length: 12 }, (_, i) => monthId(i + 1)),
+    });
     for (const [q, months] of Object.entries(QUARTER_MONTHS)) {
-      const qMonths = months.map((m) => b.byMonth.get(m));
-      if (!qMonths.every((m): m is Scenario => !!m)) continue;
       out.push({
         id: `fy${b.yy}_q${q}_${b.vSlug}`,
         version: b.version,
@@ -90,7 +102,7 @@ export function deriveScenarios(monthly: Scenario[]): DerivedScenario[] {
         periodKind: "quarter",
         label: `Q${q}${b.yy} ${vLabel}`,
         sortOrder: 1000 + (vi + 1) * 10 + (Number(q) - 1),
-        monthIds: qMonths.map((m) => m.id),
+        monthIds: months.map(monthId),
       });
     }
   }

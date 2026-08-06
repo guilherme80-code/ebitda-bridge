@@ -28,7 +28,8 @@ export const ListScenariosResponse = zod.object({
   "period": zod.string().describe('Period (e.g. FY26, FY26 Q1, FY26 Jan).'),
   "periodKind": zod.enum(['year', 'quarter', 'month']).describe('Granularity of the period. Only scenarios of the same kind can be compared (year vs year, quarter vs quarter, month vs month).'),
   "label": zod.string().describe('Display label in Portuguese.'),
-  "hasData": zod.boolean().describe('Whether imported data exists for this version. Versions without data cannot be compared yet.')
+  "hasData": zod.boolean().describe('Whether imported data exists for this version. Versions without data cannot be compared yet.'),
+  "missingMonths": zod.array(zod.string()).optional().describe('For derived year\/quarter scenarios without data, the month periods (e.g. FEB26) still missing before the period can be consolidated. Omitted when the scenario has data.')
 }).describe('A scenario is a combination of version (e.g. Budget, MRF7) and period (e.g. FY26).')),
   "defaultPair": zod.object({
   "sourceId": zod.string(),
