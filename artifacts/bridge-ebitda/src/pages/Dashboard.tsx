@@ -2,8 +2,10 @@ import {
   useGetBridge,
   useGetBridgeSummary,
   useListScenarios,
+  useListBridgeExplanations,
   getGetBridgeQueryKey,
   getGetBridgeSummaryQueryKey,
+  getListBridgeExplanationsQueryKey,
 } from '@workspace/api-client-react';
 import { WaterfallChart } from '../components/WaterfallChart';
 import { SummaryCards } from '../components/SummaryCards';
@@ -48,6 +50,15 @@ export default function Dashboard() {
   const { data: summary, isLoading: loadingSummary, isError: errorSummary } = useGetBridgeSummary(params, {
     query: { enabled: pairAvailable, queryKey: getGetBridgeSummaryQueryKey(params) },
   });
+
+  // Explicações registradas do par — mesma query do painel abaixo, então
+  // adicionar/excluir uma explicação atualiza a coluna "Não Explicado" na hora.
+  const { data: explanationsData } = useListBridgeExplanations(params, {
+    query: { enabled: pairAvailable, queryKey: getListBridgeExplanationsQueryKey(params) },
+  });
+  const explainedTotal = explanationsData
+    ? explanationsData.explanations.reduce((acc, e) => acc + e.valueMusd, 0)
+    : undefined;
 
   const [selectedComponent, setSelectedComponent] = useState<{key: string, label: string} | null>(null);
   const [simulation, setSimulation] = useState<SimulateBridgeResponse | null>(null);
@@ -166,6 +177,7 @@ export default function Dashboard() {
               <WaterfallChart 
                 steps={simulation ? simulation.steps : bridge.steps} 
                 baseSteps={simulation ? bridge.steps : undefined}
+                explainedTotal={explainedTotal}
                 onBarClick={(step) => {
                   if (step.hasDetail && !simulation) setSelectedComponent({ key: step.key, label: step.label });
                 }}

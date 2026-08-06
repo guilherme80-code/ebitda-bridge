@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatMUSD, cn } from '../lib/utils';
+import { insertUnexplainedStep } from '../lib/unexplained';
 import type { BridgeStep } from '@workspace/api-client-react';
 
 const CHANGE_EPS = 0.05;
@@ -185,7 +186,12 @@ const CustomTooltip = ({ active, payload }: any) => {
             {data.value > 0 && !data.isTotal ? '+' : ''}{formatMUSD(data.value)} MUSD
           </span>
         </div>
-        {!data.isTotal && (
+        {data.key === 'unexplained' && (
+          <p className="text-[11px] text-slate-400 font-medium mb-1.5">
+            Parte da variação ainda sem explicação registrada no painel abaixo.
+          </p>
+        )}
+        {!data.isTotal && data.key !== 'unexplained' && (
           <div className="flex justify-between items-center text-sm">
             <span className="text-slate-500 font-medium">Acumulado</span>
             <span className="font-bold text-slate-800 font-mono">{formatMUSD(data.cumulative)} MUSD</span>
@@ -206,33 +212,27 @@ interface WaterfallChartProps {
   steps: BridgeStep[];
   /** Passos originais para comparação lado a lado (modo simulação). */
   baseSteps?: BridgeStep[];
+  /**
+   * Soma das explicações registradas para o par (MUSD). Cada série calcula
+   * seu resíduo "Não Explicado" a partir dos próprios totais; quando o
+   * resíduo é ~zero (ou o valor é undefined, ainda carregando), a coluna
+   * não aparece.
+   */
+  explainedTotal?: number;
   onBarClick: (step: BridgeStep) => void;
 }
 
-export function WaterfallChart({ steps, baseSteps, onBarClick }: WaterfallChartProps) {
+export function WaterfallChart({ steps, baseSteps, explainedTotal, onBarClick }: WaterfallChartProps) {
   const chartData = useMemo(() => {
     if (!steps || steps.length === 0) return [];
     const compare = !!baseSteps && baseSteps.length > 0;
 
-    // Última coluna: variação total entre EBITDA origem e destino.
-    const withVariation = (list: BridgeStep[]): BridgeStep[] => {
-      const start = list.find((s) => s.kind === 'total_start');
-      const end = [...list].reverse().find((s) => s.kind === 'total_end');
-      if (!start || !end) return list;
-      return [
-        ...list,
-        {
-          key: 'total_variation',
-          label: 'Variação Total',
-          value: end.value - start.value,
-          cumulative: end.value,
-          kind: 'delta',
-          hasDetail: false,
-        },
-      ];
-    };
-    const steps_ = withVariation(steps);
-    const baseSteps_ = baseSteps ? withVariation(baseSteps) : baseSteps;
+    // Coluna "Não Explicado": parte da variação ainda não coberta pelas
+    // explicações registradas. Fica ANTES do EBITDA destino e some quando o
+    // resíduo é ~zero. Cada série (original/simulada) calcula seu próprio
+    // resíduo a partir dos seus totais; as explicações são as mesmas.
+    const steps_ = insertUnexplainedStep(steps, explainedTotal);
+    const baseSteps_ = baseSteps ? insertUnexplainedStep(baseSteps, explainedTotal) : baseSteps;
     const baseByKey = new Map((baseSteps_ ?? []).map((s) => [s.key, s]));
 
     const stepRange = (s: BridgeStep): [number, number] => {
@@ -295,7 +295,7 @@ export function WaterfallChart({ steps, baseSteps, onBarClick }: WaterfallChartP
         chartMax
       };
     });
-  }, [steps, baseSteps]);
+  }, [steps, baseSteps, explainedTotal]);
 
   if (chartData.length === 0) return null;
 
