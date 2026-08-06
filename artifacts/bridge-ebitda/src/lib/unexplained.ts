@@ -22,6 +22,16 @@ export function discrepancyOf(steps: BridgeStep[]): number | undefined {
   return steps.find((s) => s.key === UNEXPLAINED_STEP_KEY)?.value;
 }
 
+/**
+ * Saldo que ainda falta explicar (MUSD): diferença da fonte − explicado.
+ * Resíduos menores que UNEXPLAINED_EPS são tratados como zero (tudo
+ * explicado), o mesmo limiar que faz a coluna "Não Explicado" sumir.
+ */
+export function remainingToExplain(residual: number, explained: number): number {
+  const r = residual - explained;
+  return Math.abs(r) < UNEXPLAINED_EPS ? 0 : r;
+}
+
 export type StepWithExplanation = BridgeStep & {
   /**
    * Parte do valor do passo que vem de explicações registradas (MUSD),

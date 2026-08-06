@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyExplanations, discrepancyOf, UNEXPLAINED_EPS } from './unexplained';
+import { applyExplanations, discrepancyOf, remainingToExplain, UNEXPLAINED_EPS } from './unexplained';
 import type { BridgeStep } from '@workspace/api-client-react';
 
 // Bridge que FECHA pela fonte: sem passo "Não Explicado" vindo do servidor.
@@ -53,6 +53,22 @@ describe('discrepancyOf', () => {
   });
   it('retorna undefined quando o bridge fecha pela fonte', () => {
     expect(discrepancyOf(closedSteps)).toBeUndefined();
+  });
+});
+
+describe('remainingToExplain', () => {
+  it('saldo = diferença − explicado', () => {
+    expect(remainingToExplain(-6.2, -4)).toBeCloseTo(-2.2, 10);
+    expect(remainingToExplain(-6.2, 0)).toBeCloseTo(-6.2, 10);
+    expect(remainingToExplain(3, 1)).toBeCloseTo(2, 10);
+  });
+  it('resíduo abaixo do limiar vira zero (tudo explicado)', () => {
+    expect(remainingToExplain(-6.2, -6.2)).toBe(0);
+    expect(remainingToExplain(-6.2, -6.2 - UNEXPLAINED_EPS / 2)).toBe(0);
+    expect(remainingToExplain(-6.2, -6.2 + UNEXPLAINED_EPS / 2)).toBe(0);
+  });
+  it('explicado além da diferença: saldo com sinal oposto', () => {
+    expect(remainingToExplain(-6.2, -11.2)).toBeCloseTo(5, 10);
   });
 });
 

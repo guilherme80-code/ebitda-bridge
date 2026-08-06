@@ -7,8 +7,9 @@ import {
   getListBridgeExplanationsQueryKey,
 } from '@workspace/api-client-react';
 import { formatMUSD, cn } from '../lib/utils';
+import { remainingToExplain } from '../lib/unexplained';
 import { Textarea } from './ui/textarea';
-import { MessageSquareText, Plus, Trash2, Loader2 } from 'lucide-react';
+import { MessageSquareText, Plus, Trash2, Loader2, CheckCircle2 } from 'lucide-react';
 
 interface ExplanationsPanelProps {
   sourceId: string | null;
@@ -85,19 +86,41 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
           </p>
         </div>
         {typeof residual === 'number' && (
-          <div className="mt-3 sm:mt-0 text-sm font-semibold text-slate-600 whitespace-nowrap" data-testid="text-variation-summary">
-            Diferença a explicar:{' '}
-            <span className={cn('font-mono font-bold', residual >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
-              {residual > 0 ? '+' : ''}{formatMUSD(residual)} MUSD
-            </span>
-            {explanations.length > 0 && (
-              <span className="ml-3 text-slate-500">
-                Explicado:{' '}
-                <span className="font-mono font-bold text-slate-700">
-                  {explainedTotal > 0 ? '+' : ''}{formatMUSD(explainedTotal)} MUSD
-                </span>
+          <div
+            className="mt-3 sm:mt-0 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm font-semibold text-slate-600 whitespace-nowrap"
+            data-testid="text-variation-summary"
+          >
+            <span>
+              Diferença a explicar:{' '}
+              <span className={cn('font-mono font-bold', residual >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                {residual > 0 ? '+' : ''}{formatMUSD(residual)} MUSD
               </span>
-            )}
+            </span>
+            <span className="text-slate-500" data-testid="text-explained-total">
+              Explicado:{' '}
+              <span className="font-mono font-bold text-slate-700">
+                {explainedTotal > 0 ? '+' : ''}{formatMUSD(explainedTotal)} MUSD
+              </span>
+            </span>
+            {(() => {
+              const remaining = remainingToExplain(residual, explainedTotal);
+              return remaining === 0 ? (
+                <span
+                  className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5"
+                  data-testid="text-remaining-to-explain"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Falta explicar: <span className="font-mono font-bold">0,0 MUSD</span>
+                </span>
+              ) : (
+                <span data-testid="text-remaining-to-explain">
+                  Falta explicar:{' '}
+                  <span className={cn('font-mono font-bold', remaining > 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                    {remaining > 0 ? '+' : ''}{formatMUSD(remaining)} MUSD
+                  </span>
+                </span>
+              );
+            })()}
           </div>
         )}
       </div>
