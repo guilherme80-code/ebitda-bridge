@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatMUSD, cn } from '../lib/utils';
-import { insertUnexplainedStep } from '../lib/unexplained';
+import { applyExplanations } from '../lib/unexplained';
 import type { BridgeStep } from '@workspace/api-client-react';
 
 const CHANGE_EPS = 0.05;
@@ -227,12 +227,12 @@ export function WaterfallChart({ steps, baseSteps, explainedTotal, onBarClick }:
     if (!steps || steps.length === 0) return [];
     const compare = !!baseSteps && baseSteps.length > 0;
 
-    // Coluna "Não Explicado": residual das alavancas nomeadas (Estoque /
-    // Outros) ainda não coberto pelas explicações registradas. Fica ANTES do
-    // EBITDA destino e some quando o resíduo é ~zero. Cada série
-    // (original/simulada) usa o residual dos seus próprios passos.
-    const steps_ = insertUnexplainedStep(steps, explainedTotal);
-    const baseSteps_ = baseSteps ? insertUnexplainedStep(baseSteps, explainedTotal) : baseSteps;
+    // Coluna "Não Explicado": vem do servidor apenas quando o bridge não
+    // fecha pela fonte. Aqui só descontamos as explicações registradas do
+    // valor mostrado (a coluna some quando o resíduo é ~zero). Cada série
+    // (original/simulada) usa a diferença dos seus próprios passos.
+    const steps_ = applyExplanations(steps, explainedTotal);
+    const baseSteps_ = baseSteps ? applyExplanations(baseSteps, explainedTotal) : baseSteps;
     const baseByKey = new Map((baseSteps_ ?? []).map((s) => [s.key, s]));
 
     const stepRange = (s: BridgeStep): [number, number] => {

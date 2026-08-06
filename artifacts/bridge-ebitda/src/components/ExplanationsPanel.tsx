@@ -81,12 +81,12 @@ export function ExplanationsPanel({ sourceId, targetId, enabled, residual }: Exp
             Explicações da Variação
           </h2>
           <p className="text-sm font-medium text-slate-500 mt-1">
-            Registre o valor e a explicação do residual que não está nas alavancas nomeadas (Outros). As explicações ficam salvas para quem consultar esta combinação no futuro.
+            O bridge não fecha só com os dados da fonte. Registre o valor e a explicação da diferença. As explicações ficam salvas para quem consultar esta combinação no futuro.
           </p>
         </div>
         {typeof residual === 'number' && (
           <div className="mt-3 sm:mt-0 text-sm font-semibold text-slate-600 whitespace-nowrap" data-testid="text-variation-summary">
-            Residual a explicar:{' '}
+            Diferença a explicar:{' '}
             <span className={cn('font-mono font-bold', residual >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
               {residual > 0 ? '+' : ''}{formatMUSD(residual)} MUSD
             </span>

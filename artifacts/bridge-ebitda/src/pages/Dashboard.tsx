@@ -15,7 +15,7 @@ import { ScenarioSimulator } from '../components/ScenarioSimulator';
 import type { SimulateBridgeResponse } from '@workspace/api-client-react';
 import { ScenarioSelector } from '../components/ScenarioSelector';
 import { ExplanationsPanel } from '../components/ExplanationsPanel';
-import { residualToExplain } from '../lib/unexplained';
+import { discrepancyOf } from '../lib/unexplained';
 import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import logoUrl from "@assets/brand/arcelormittal-logo-white.svg";
@@ -187,12 +187,14 @@ export default function Dashboard() {
           </main>
         )}
 
-        {!isLoading && !isError && bridge && (
+        {/* Painel de explicações: só quando o bridge NÃO fecha pela fonte
+            (o servidor incluiu o passo "Não Explicado"). */}
+        {!isLoading && !isError && bridge && discrepancyOf(bridge.steps) !== undefined && (
           <ExplanationsPanel
             sourceId={sourceId}
             targetId={targetId}
             enabled={pairAvailable}
-            residual={residualToExplain(bridge.steps)}
+            residual={discrepancyOf(bridge.steps)}
           />
         )}
 

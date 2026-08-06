@@ -54,16 +54,23 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)
     fixed_cost: -34.29055851516902,
     forex: 70.57285860656927,
     // O seed traz Stock Variation: "Estoque" recebe o valor real dos dados e
-    // "Outros" (sv_others) fica só com a diferença de fechamento restante.
-    // A soma dos dois é o antigo plug único (-10.20121656225709).
+    // "Outros" (sv_others) fica só com o valor vindo da fonte. A diferença de
+    // fechamento restante NÃO é absorvida por nenhum dos dois — vai para
+    // `discrepancy` (a coluna "Não Explicado" do bridge).
     stock: -3.860422459599194,
-    sv_others: -6.340794102657895,
+    sv_others: -5.7640203629386235,
   };
 
-  it("Estoque + Outros = antigo plug único (Estoque / Outros)", () => {
+  it("Estoque + Outros + diferença de fechamento = antigo plug único", () => {
     expect(
-      (bridge.drivers["stock"] ?? 0) + (bridge.drivers["sv_others"] ?? 0),
+      (bridge.drivers["stock"] ?? 0) +
+        (bridge.drivers["sv_others"] ?? 0) +
+        bridge.discrepancy,
     ).toBeCloseTo(-10.20121656225709, 6);
+  });
+
+  it("diferença de fechamento bate com a referência", () => {
+    expect(bridge.discrepancy).toBeCloseTo(-0.5767737397192718, 6);
   });
 
   it("Estoque bate com a diferença das linhas de Stock Variation dos dados", () => {
@@ -86,6 +93,8 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)
     expect(Object.keys(b.drivers)).not.toContain("stock");
     // O plug absorve o que antes era explicado pelas linhas de estoque.
     expect(b.drivers["sv_others"]).toBeCloseTo(-10.20121656225709, 6);
+    // Sem Stock Variation real, o plug fecha por definição: sem diferença.
+    expect(b.discrepancy).toBe(0);
     const sum = Object.values(b.drivers).reduce((s, v) => s + v, 0);
     expect(b.start + sum).toBeCloseTo(b.end, 9);
   });
@@ -95,9 +104,9 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)
     });
   }
 
-  it("o bridge fecha: start + soma das alavancas = end", () => {
+  it("o bridge fecha: start + alavancas + diferença de fechamento = end", () => {
     const sum = Object.values(bridge.drivers).reduce((s, v) => s + v, 0);
-    expect(bridge.start + sum).toBeCloseTo(bridge.end, 9);
+    expect(bridge.start + sum + bridge.discrepancy).toBeCloseTo(bridge.end, 9);
   });
 
   it("quantidades consolidadas = soma das quantidades mensais (por produto)", () => {
@@ -118,7 +127,7 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)
       loadDerived("fy26_q1_mrf7").data,
     );
     const sum = Object.values(q.drivers).reduce((s, v) => s + v, 0);
-    expect(q.start + sum).toBeCloseTo(q.end, 9);
+    expect(q.start + sum + q.discrepancy).toBeCloseTo(q.end, 9);
   });
 
   it("mês contra mês também fecha (JAN Budget → JAN MRF7)", () => {
@@ -127,7 +136,7 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)
       loadScenario("fy26_m01_mrf7"),
     );
     const sum = Object.values(m.drivers).reduce((s, v) => s + v, 0);
-    expect(m.start + sum).toBeCloseTo(m.end, 9);
+    expect(m.start + sum + m.discrepancy).toBeCloseTo(m.end, 9);
   });
 });
 

@@ -170,7 +170,9 @@ export function simulateBridge(
   labels: { source: string; target: string },
 ): SimulationOutcome {
   const base = computeBridge(source, target);
-  const basePlug = base.drivers["sv_others"] ?? 0;
+  // Plug de fechamento a preservar: Estoque/Outros + diferença não explicada
+  // (a simulação não deve alterar nenhum dos dois).
+  const basePlug = (base.drivers["sv_others"] ?? 0) + base.discrepancy;
 
   const simSource = clone(source);
   const simTarget = clone(target);

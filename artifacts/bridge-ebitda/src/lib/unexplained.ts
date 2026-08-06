@@ -4,54 +4,49 @@ import type { BridgeStep } from '@workspace/api-client-react';
 export const UNEXPLAINED_EPS = 0.05;
 
 /**
- * Chave do passo de residual/plug no bridge. Quando os dados trazem Stock
- * Variation, este passo é apenas "Outros" (o "Estoque" vira alavanca própria,
- * com o valor real dos dados); sem Stock Variation é o plug único
- * "Estoque / Outros".
+ * Chave do passo "Não Explicado" que o servidor insere no bridge apenas
+ * quando os dados da fonte não fecham a passagem (diferença ≥ 0,05 MUSD).
+ * Quando o bridge fecha pela fonte, o passo não existe.
  */
-export const RESIDUAL_STEP_KEY = 'sv_others';
+export const UNEXPLAINED_STEP_KEY = 'unexplained';
 
 /**
- * Residual a explicar da série: o valor do passo de plug ("Outros", ou
- * "Estoque / Outros" quando não há Stock Variation nos dados) — variação
- * total − alavancas nomeadas. Retorna undefined se o passo não existir.
+ * Diferença de fechamento da série (valor do passo "Não Explicado" vindo do
+ * servidor). undefined quando o bridge fecha pela fonte — nesse caso não há
+ * coluna nem painel de explicações.
  */
-export function residualToExplain(steps: BridgeStep[]): number | undefined {
-  const plug = steps.find((s) => s.key === RESIDUAL_STEP_KEY);
-  return plug?.value;
+export function discrepancyOf(steps: BridgeStep[]): number | undefined {
+  return steps.find((s) => s.key === UNEXPLAINED_STEP_KEY)?.value;
 }
 
 /**
- * Insere a coluna "Não Explicado" imediatamente antes do EBITDA destino
- * (passo total_end). A base é o residual das alavancas nomeadas DA PRÓPRIA
- * série (o valor do passo de plug "Outros"), descontando a soma das explicações
- * registradas — que não variam com a simulação:
- *   resíduo    = residual (Estoque / Outros) − explicado
- *   cumulative = EBITDA destino da série
- *   value      = resíduo
- *   início     = cumulative − value
- * Quando o resíduo é ~zero, a coluna não aparece. `explainedTotal ===
- * undefined` (explicações ainda não carregadas) ou série sem o passo de
- * residual também omitem a coluna.
+ * Desconta as explicações registradas do passo "Não Explicado" DA PRÓPRIA
+ * série (as explicações não variam com a simulação):
+ *   resíduo = diferença de fechamento − explicado
+ * O passo ajustado começa onde a alavanca anterior terminou (cumulative =
+ * cumulative anterior + resíduo), mantendo a cadeia de barras contínua; a
+ * parte explicada aparece como o degrau restante até o EBITDA destino.
+ * Quando o resíduo é ~zero, o passo some do gráfico. Sem passo "Não
+ * Explicado" (bridge fecha pela fonte) ou com `explainedTotal === undefined`
+ * (explicações ainda não carregadas), os passos ficam como vieram.
  */
-export function insertUnexplainedStep(
+export function applyExplanations(
   steps: BridgeStep[],
   explainedTotal: number | undefined,
 ): BridgeStep[] {
   if (explainedTotal === undefined) return steps;
-  const residual = residualToExplain(steps);
-  const endIdx = steps.findIndex((s) => s.kind === 'total_end');
-  if (residual === undefined || endIdx < 0) return steps;
-  const end = steps[endIdx];
-  const unexplained = residual - explainedTotal;
-  if (Math.abs(unexplained) < UNEXPLAINED_EPS) return steps;
-  const step: BridgeStep = {
-    key: 'unexplained',
-    label: 'Não Explicado',
-    value: unexplained,
-    cumulative: end.value,
-    kind: 'delta',
-    hasDetail: false,
-  };
-  return [...steps.slice(0, endIdx), step, ...steps.slice(endIdx)];
+  const idx = steps.findIndex((s) => s.key === UNEXPLAINED_STEP_KEY);
+  if (idx < 0) return steps;
+  const remainder = steps[idx].value - explainedTotal;
+  if (Math.abs(remainder) < UNEXPLAINED_EPS) {
+    return [...steps.slice(0, idx), ...steps.slice(idx + 1)];
+  }
+  if (Math.abs(remainder - steps[idx].value) < 1e-12) return steps;
+  const prevCumulative =
+    idx > 0 ? steps[idx - 1].cumulative : steps[idx].cumulative - steps[idx].value;
+  return [
+    ...steps.slice(0, idx),
+    { ...steps[idx], value: remainder, cumulative: prevCumulative + remainder },
+    ...steps.slice(idx + 1),
+  ];
 }

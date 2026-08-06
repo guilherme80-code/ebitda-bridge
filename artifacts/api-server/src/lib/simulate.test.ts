@@ -144,9 +144,22 @@ describe("caso representativo — volume de Slab Calvert +10% no MRF7", () => {
     expect(outcome.bridge.end).toBeGreaterThan(base.end);
   });
 
-  it("mantém o plug de Estoque/Outros igual ao do bridge original", () => {
-    expect(outcome.bridge.drivers["sv_others"]).toBeCloseTo(
-      base.drivers["sv_others"] ?? 0,
+  it("mantém o plug de Estoque/Outros + diferença igual ao do bridge original", () => {
+    expect(
+      (outcome.bridge.drivers["sv_others"] ?? 0) + outcome.bridge.discrepancy,
+    ).toBeCloseTo(
+      (base.drivers["sv_others"] ?? 0) + base.discrepancy,
+      3,
+    );
+  });
+
+  it("o bridge simulado fecha: start + alavancas + diferença = end", () => {
+    const sum = Object.values(outcome.bridge.drivers).reduce(
+      (s, v) => s + v,
+      0,
+    );
+    expect(outcome.bridge.start + sum + outcome.bridge.discrepancy).toBeCloseTo(
+      outcome.bridge.end,
       3,
     );
   });

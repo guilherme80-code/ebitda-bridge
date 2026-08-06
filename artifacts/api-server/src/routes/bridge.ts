@@ -26,6 +26,38 @@ function bridgeDriverList(
     hasStock && d.key === "sv_others" ? { key: d.key, label: OTHERS_ONLY_LABEL } : d,
   );
 }
+
+/**
+ * Passo "Não Explicado": só existe quando os dados da fonte não fecham o
+ * bridge (diferença ≥ 0,05 MUSD). Entra logo antes do EBITDA destino.
+ */
+const UNEXPLAINED_EPS = 0.05;
+const UNEXPLAINED_KEY = "unexplained";
+const UNEXPLAINED_LABEL = "Não Explicado";
+
+function unexplainedStep(
+  discrepancy: number,
+  end: number,
+): {
+  key: string;
+  label: string;
+  value: number;
+  cumulative: number;
+  kind: string;
+  hasDetail: boolean;
+}[] {
+  if (Math.abs(discrepancy) < UNEXPLAINED_EPS) return [];
+  return [
+    {
+      key: UNEXPLAINED_KEY,
+      label: UNEXPLAINED_LABEL,
+      value: discrepancy,
+      cumulative: end,
+      kind: "delta",
+      hasDetail: false,
+    },
+  ];
+}
 import {
   GetBridgeResponse,
   GetBridgeComponentParams,
@@ -262,7 +294,7 @@ router.get("/bridge", async (req, res): Promise<void> => {
     return;
   }
 
-  const { start, end, drivers, details } = pair.bridge;
+  const { start, end, drivers, details, discrepancy } = pair.bridge;
   let cumulative = start;
   const steps = [
     {
@@ -285,6 +317,7 @@ router.get("/bridge", async (req, res): Promise<void> => {
         hasDetail: (details[d.key]?.length ?? 0) > 0,
       };
     }),
+    ...unexplainedStep(discrepancy, end),
     {
       key: "ebitda_target",
       label: `EBITDA ${pair.target.label}`,
@@ -463,7 +496,7 @@ Regras:
     return;
   }
 
-  const { start, end, drivers, details } = outcome.bridge;
+  const { start, end, drivers, details, discrepancy } = outcome.bridge;
   let cumulative = start;
   const steps = [
     {
@@ -486,6 +519,7 @@ Regras:
         hasDetail: (details[d.key]?.length ?? 0) > 0,
       };
     }),
+    ...unexplainedStep(discrepancy, end),
     {
       key: "ebitda_target",
       label: `EBITDA ${pair.target.label} (simulado)`,
@@ -558,12 +592,17 @@ router.get("/bridge/summary", async (req, res): Promise<void> => {
     return;
   }
 
-  const { start, end, drivers } = pair.bridge;
-  const deltas = bridgeDriverList(drivers).map((d) => ({
-    key: d.key,
-    label: d.label,
-    value: drivers[d.key] ?? 0,
-  }));
+  const { start, end, drivers, discrepancy } = pair.bridge;
+  const deltas = [
+    ...bridgeDriverList(drivers).map((d) => ({
+      key: d.key,
+      label: d.label,
+      value: drivers[d.key] ?? 0,
+    })),
+    ...(Math.abs(discrepancy) >= UNEXPLAINED_EPS
+      ? [{ key: UNEXPLAINED_KEY, label: UNEXPLAINED_LABEL, value: discrepancy }]
+      : []),
+  ];
   const largestPositive = deltas.reduce((a, b) => (b.value > a.value ? b : a));
   const largestNegative = deltas.reduce((a, b) => (b.value < a.value ? b : a));
   const positiveTotal = deltas

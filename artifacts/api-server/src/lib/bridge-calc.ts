@@ -70,6 +70,13 @@ export interface BridgeTable {
 export interface BridgeResult {
   start: number; // MUSD
   end: number; // MUSD
+  /**
+   * Diferença de fechamento não justificada pela fonte (MUSD): variação total
+   * − alavancas (incl. Estoque e Outros vindos dos dados). Zero quando não há
+   * Stock Variation nos dados (o plug "Estoque / Outros" fecha por definição,
+   * como na aba Cálculo do Excel).
+   */
+  discrepancy: number;
   drivers: Record<string, number>; // MUSD por alavanca
   details: Record<string, DetailLine[]>;
   tables: BridgeTable[]; // tabelas detalhadas (abas Receita, Fixed Cost, ...)
@@ -356,19 +363,15 @@ export function computeBridge(
   const hasStockData =
     source.misc.some((m) => m.driver === "stock_variation") ||
     target.misc.some((m) => m.driver === "stock_variation");
-  const othersResidual = svOthers - stock.total; // = others.total + (stockPlug − stock.total)
+  // Diferença de fechamento não justificada pela fonte: só existe quando os
+  // dados trazem Stock Variation real (sem ela, o plug fecha por definição).
+  const discrepancyK = hasStockData ? stockPlug - stock.total : 0;
   const stockDetail: DetailLine[] = stock.lines.filter(
     (l) => Math.abs(l.value) > 1e-9,
   );
-  const othersDetail: DetailLine[] = [
-    ...others.lines.map((l) => ({ ...l, group: "Outros" })),
-    {
-      label: "Ajuste de fechamento",
-      group: "Fechamento",
-      value: (stockPlug - stock.total) / K,
-      sortOrder: 999,
-    },
-  ].filter((l) => Math.abs(l.value) > 1e-9);
+  const othersDetail: DetailLine[] = others.lines
+    .map((l) => ({ ...l, group: "Outros" }))
+    .filter((l) => Math.abs(l.value) > 1e-9);
   const svDetail: DetailLine[] = [
     ...others.lines.map((l) => ({ ...l, group: "Outros" })),
     ...stock.lines.map((l, i) => ({
@@ -605,15 +608,25 @@ export function computeBridge(
         rs.reduce((s, r) => s + r.eff, 0) / K,
       ],
     ),
-    {
-      label: "Variação de estoque — ajuste de fechamento",
-      kind: "row" as const,
-      values: [null, null, (stockPlug - stock.total) / K],
-    },
+    // Sem Stock Variation nos dados, o ajuste de fechamento faz parte do plug;
+    // com Stock Variation real, a diferença vira "Não Explicado" no bridge.
+    ...(hasStockData
+      ? []
+      : [
+          {
+            label: "Variação de estoque — ajuste de fechamento",
+            kind: "row" as const,
+            values: [null, null, (stockPlug - stock.total) / K],
+          },
+        ]),
     {
       label: "Total",
       kind: "total" as const,
-      values: [null, null, svOthers / K],
+      values: [
+        null,
+        null,
+        (hasStockData ? others.total + stock.total : svOthers) / K,
+      ],
     },
   ];
   tables.push({
@@ -630,6 +643,7 @@ export function computeBridge(
   return {
     start: start / K,
     end: end / K,
+    discrepancy: discrepancyK / K,
     drivers: {
       vol_mix: volMixTotal / K,
       selling_price: sellingPrice / K,
@@ -638,7 +652,9 @@ export function computeBridge(
       fixed_cost: fixedCost / K,
       forex: forex / K,
       ...(hasStockData ? { stock: stock.total / K } : {}),
-      sv_others: (hasStockData ? othersResidual : svOthers) / K,
+      // Com Stock Variation real, "Outros" é só o valor vindo da fonte (não
+      // absorve a diferença de fechamento); sem ela, plug único que fecha.
+      sv_others: (hasStockData ? others.total : svOthers) / K,
     },
     details: {
       vol_mix: volMixDetail,
