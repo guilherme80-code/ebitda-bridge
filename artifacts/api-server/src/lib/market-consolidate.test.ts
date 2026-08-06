@@ -121,7 +121,7 @@ describe("consolidateMarketIndicators", () => {
     expect(forex.varValue).toBeUndefined();
   });
 
-  it("soma impactos e kt entre meses, omite preços em pares multi-mês", () => {
+  it("soma impactos e kt entre meses; preços viram média ponderada pelo kt", () => {
     const inds = [indicator(1)];
     const lines = [line(10, 1, "Pellet premium")];
     const values = [
@@ -136,14 +136,51 @@ describe("consolidateMarketIndicators", () => {
     const pellet = c.lines[0];
     expect(pellet.impactMusd).toBeCloseTo(-(5 * 2) - 7 * 3.5);
     expect(pellet.volumeKt).toBeCloseTo(5.5);
-    expect(pellet.sourceValue).toBeUndefined();
-    expect(pellet.varValue).toBeUndefined();
+    // média ponderada pelo kt do próprio lado/mês
+    const srcAvg = (30 * 2 + 31 * 3.5) / 5.5;
+    const tgtAvg = (35 * 2 + 38 * 3.5) / 5.5;
+    expect(pellet.sourceValue).toBeCloseTo(srcAvg);
+    expect(pellet.targetValue).toBeCloseTo(tgtAvg);
+    expect(pellet.varValue).toBeCloseTo(tgtAvg - srcAvg);
     expect(c.items.sort()).toEqual(["Fines", "Pellets"]);
-    expect(c.months.map((m) => m.periodLabel)).toEqual(["JAN26", "FEB26"]);
-    expect(c.months[0].totalMusd).toBeCloseTo(-10);
-    // detalhe mensal preserva os preços
-    expect(c.months[0].lines[0].sourceValue).toBe(30);
-    expect(c.months[0].lines[0].varValue).toBe(5);
+    // não há mais abertura mensal na resposta
+    expect("months" in c).toBe(false);
+  });
+
+  it("linhas de montante em pares multi-mês: só $m, impactos somados", () => {
+    const inds = [indicator(1)];
+    const lines = [line(11, 1, "Forex (contract)", { kind: "amount" })];
+    const values = [
+      value(11, "fy26_m01_budget", 0),
+      value(11, "fy26_m01_mrf7", 2),
+      value(11, "fy26_m02_budget", 1),
+      value(11, "fy26_m02_mrf7", 4),
+    ];
+    const [c] = consolidateMarketIndicators(requested, pairs, inds, lines, values, []);
+    const forex = c.lines[0];
+    expect(forex.impactMusd).toBeCloseTo(-2 + -3);
+    expect(forex.sourceValue).toBeUndefined();
+    expect(forex.targetValue).toBeUndefined();
+    expect(forex.varValue).toBeUndefined();
+    expect(forex.volumeKt).toBeUndefined();
+  });
+
+  it("sem kt em algum mês, o preço consolidado cai para média simples", () => {
+    const inds = [indicator(1)];
+    const lines = [line(10, 1, "Pellet premium")];
+    const values = [
+      value(10, "fy26_m01_budget", 30, 2),
+      value(10, "fy26_m01_mrf7", 35, 2),
+      value(10, "fy26_m02_budget", 40, null),
+      value(10, "fy26_m02_mrf7", 45, null),
+    ];
+    const [c] = consolidateMarketIndicators(requested, pairs, inds, lines, values, []);
+    const l = c.lines[0];
+    expect(l.sourceValue).toBeCloseTo((30 + 40) / 2);
+    expect(l.targetValue).toBeCloseTo((35 + 45) / 2);
+    // impacto: só o mês com kt no destino contribui
+    expect(l.impactMusd).toBeCloseTo(-(5 * 2));
+    expect(l.volumeKt).toBeCloseTo(2);
   });
 
   it("kt vem só do mês destino — sem kt no destino, impacto zero", () => {
@@ -181,6 +218,74 @@ describe("consolidateMarketIndicators", () => {
     expect(l.impactMusd).toBe(0);
   });
 
+  it("meses sem par dos dois lados não entram na média nem na variação", () => {
+    // JAN tem os dois lados; FEB só o destino: médias e Var usam só JAN.
+    const values = [
+      value(10, "fy26_m01_budget", 30, 2),
+      value(10, "fy26_m01_mrf7", 35, 2),
+      value(10, "fy26_m02_mrf7", 90, 3),
+    ];
+    const [c] = consolidateMarketIndicators(
+      requested,
+      pairs,
+      [indicator(1)],
+      [line(10, 1, "Pellet premium")],
+      values,
+      [],
+    );
+    const l = c.lines[0];
+    expect(l.sourceValue).toBeCloseTo(30);
+    expect(l.targetValue).toBeCloseTo(35);
+    expect(l.varValue).toBeCloseTo(5);
+    // kt e impacto seguem as regras de soma: kt do destino soma os dois meses
+    expect(l.volumeKt).toBeCloseTo(5);
+    expect(l.impactMusd).toBeCloseTo(-(5 * 2));
+  });
+
+  it("origem e destino em meses diferentes: mostra médias, sem variação nem impacto", () => {
+    const values = [
+      value(10, "fy26_m01_budget", 30, 2),
+      value(10, "fy26_m02_mrf7", 90, 3),
+    ];
+    const [c] = consolidateMarketIndicators(
+      requested,
+      pairs,
+      [indicator(1)],
+      [line(10, 1, "Pellet premium")],
+      values,
+      [],
+    );
+    const l = c.lines[0];
+    expect(l.sourceValue).toBeCloseTo(30);
+    expect(l.targetValue).toBeCloseTo(90);
+    expect(l.varValue).toBeUndefined();
+    expect(l.impactMusd).toBe(0);
+  });
+
+  it("valor nulo com kt presente não entra na média nem gera impacto", () => {
+    const values = [
+      value(10, "fy26_m01_budget", null, 2),
+      value(10, "fy26_m01_mrf7", 35, 2),
+      value(10, "fy26_m02_budget", 30, 3),
+      value(10, "fy26_m02_mrf7", 40, 3),
+    ];
+    const [c] = consolidateMarketIndicators(
+      requested,
+      pairs,
+      [indicator(1)],
+      [line(10, 1, "Pellet premium")],
+      values,
+      [],
+    );
+    const l = c.lines[0];
+    // só FEB é pareado
+    expect(l.sourceValue).toBeCloseTo(30);
+    expect(l.targetValue).toBeCloseTo(40);
+    expect(l.varValue).toBeCloseTo(10);
+    expect(l.impactMusd).toBeCloseTo(-(10 * 3));
+    expect(l.volumeKt).toBeCloseTo(5);
+  });
+
   it("títulos diferentes não se misturam e meses sem dados ficam de fora", () => {
     const inds = [indicator(1, "Iron Ores"), indicator(2, "Coking Coal")];
     const lines = [line(10, 1, "A"), line(11, 2, "B")];
@@ -192,8 +297,8 @@ describe("consolidateMarketIndicators", () => {
     ];
     const out = consolidateMarketIndicators(requested, pairs, inds, lines, values, []);
     expect(out.map((e) => e.title)).toEqual(["Iron Ores", "Coking Coal"]);
-    expect(out[0].months).toHaveLength(1);
-    expect(out[0].months[0].periodLabel).toBe("JAN26");
+    expect(out[0].lines.map((l) => l.label)).toEqual(["A"]);
+    expect(out[1].lines.map((l) => l.label)).toEqual(["B"]);
   });
 
   it("ignora valores de meses fora do intervalo pedido", () => {

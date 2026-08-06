@@ -5,10 +5,12 @@
  * FY/trimestre, o painel expande o par em pares mensais (mês i da origem ↔
  * mês i do destino), calcula cada mês e soma.
  *
- * Regras de consolidação:
+ * Regras de consolidação (tabela única, sem abertura mensal):
  *  - impacto ($m) e volume (kt): somados entre os meses;
- *  - valores de preço (origem/destino/variação): mostrados apenas quando o
- *    par cobre um único mês — somar preços não faz sentido;
+ *  - valores de preço (origem/destino): média ponderada pelo kt do próprio
+ *    mês/lado (somar preços não faz sentido); Var = destino − origem das
+ *    médias. O impacto continua sendo a soma dos impactos mensais — a
+ *    aproximação Var × kt total pode divergir por arredondamento de mix;
  *  - itens vinculados (Fines, Pellets...): definidos por indicador.
  */
 import type {
@@ -84,46 +86,41 @@ export type ConsolidatedExplanation = {
   totalMusd: number;
   items: string[];
   lines: LineOut[];
-  months: { periodLabel: string; totalMusd: number; lines: LineOut[] }[];
 };
 
-/**
- * Calcula a linha de um mês a partir dos VALORES por versão: variação =
- * destino − origem; impacto = direction × variação × kt (linhas de preço,
- * SEMPRE o kt do mês destino — sem fallback) ou direction × variação
- * (linhas de montante em MUSD). Sem os dois valores não há impacto.
- */
-function computeMonthLine(
-  line: MarketIndicatorLine,
-  src: MarketIndicatorValue | undefined,
-  tgt: MarketIndicatorValue | undefined,
-): LineOut | null {
-  if (!src && !tgt) return null;
-  const sv = src?.value ?? null;
-  const tv = tgt?.value ?? null;
-  const kt = tgt?.volumeKt ?? null;
-  const varValue = sv != null && tv != null ? tv - sv : null;
-  let impact = 0;
-  if (varValue != null) {
-    if (line.kind === "amount") impact = line.direction * varValue;
-    else if (kt != null) impact = line.direction * varValue * kt;
+/** Média ponderada; pesos ausentes/zerados em TODOS os pontos → média simples. */
+function weightedAvg(points: { v: number; w: number | null }[]): number | null {
+  if (points.length === 0) return null;
+  const totalW = points.reduce((s, p) => s + (p.w ?? 0), 0);
+  if (totalW > 0 && points.every((p) => p.w != null)) {
+    return points.reduce((s, p) => s + p.v * (p.w as number), 0) / totalW;
   }
-  // Linhas de montante (MUSD): só o impacto interessa — os "níveis" internos
-  // não são preços e não devem aparecer nas colunas de preço do pop-up.
-  const isPrice = line.kind !== "amount";
-  return {
-    id: line.id,
-    label: line.label,
-    ...(isPrice && sv != null ? { sourceValue: sv } : {}),
-    ...(isPrice && tv != null ? { targetValue: tv } : {}),
-    ...(isPrice && varValue != null ? { varValue } : {}),
-    ...(isPrice && kt != null ? { volumeKt: kt } : {}),
-    impactMusd: impact,
-  };
+  return points.reduce((s, p) => s + p.v, 0) / points.length;
 }
 
 /**
- * Consolida os indicadores de explicação para os pares mensais pedidos.
+ * Impacto de um mês: variação = destino − origem; impacto = direction ×
+ * variação × kt (linhas de preço, SEMPRE o kt do mês destino — sem fallback)
+ * ou direction × variação (linhas de montante em MUSD). Sem os dois valores
+ * não há impacto.
+ */
+function monthImpact(
+  line: MarketIndicatorLine,
+  src: MarketIndicatorValue | undefined,
+  tgt: MarketIndicatorValue | undefined,
+): number {
+  const sv = src?.value ?? null;
+  const tv = tgt?.value ?? null;
+  if (sv == null || tv == null) return 0;
+  const varValue = tv - sv;
+  if (line.kind === "amount") return line.direction * varValue;
+  const kt = tgt?.volumeKt ?? null;
+  return kt != null ? line.direction * varValue * kt : 0;
+}
+
+/**
+ * Consolida os indicadores de explicação para os pares mensais pedidos em uma
+ * única tabela por indicador (sem abertura mensal).
  * `values` são as linhas cruas de valores por cenário mensal dos dois lados.
  */
 export function consolidateMarketIndicators(
@@ -152,65 +149,72 @@ export function consolidateMarketIndicators(
     itemsByIndicator.set(i.indicatorId, arr);
   }
 
-  const singleMonth = pairs.length === 1;
   const out: ConsolidatedExplanation[] = [];
   const sorted = [...indicators].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
   for (const ind of sorted) {
-    const indLines = linesByIndicator.get(ind.id) ?? [];
-    const months: ConsolidatedExplanation["months"] = [];
-    for (const p of pairs) {
-      const monthLines: LineOut[] = [];
-      for (const l of indLines) {
-        const computed = computeMonthLine(
-          l,
-          valueByLineScenario.get(`${l.id}|${p.sourceId}`),
-          valueByLineScenario.get(`${l.id}|${p.targetId}`),
-        );
-        if (computed) monthLines.push(computed);
+    const outLines: LineOut[] = [];
+    for (const l of linesByIndicator.get(ind.id) ?? []) {
+      type Pt = { v: number; w: number | null };
+      const srcPoints: Pt[] = [];
+      const tgtPoints: Pt[] = [];
+      // Meses "pareados" (valor dos DOIS lados): só eles podem gerar variação
+      // — comparar médias de populações de meses diferentes não faz sentido.
+      const matchedSrc: Pt[] = [];
+      const matchedTgt: Pt[] = [];
+      let volumeKt: number | null = null;
+      let impact = 0;
+      let hasData = false;
+      for (const p of pairs) {
+        const src = valueByLineScenario.get(`${l.id}|${p.sourceId}`);
+        const tgt = valueByLineScenario.get(`${l.id}|${p.targetId}`);
+        if (!src && !tgt) continue;
+        hasData = true;
+        if (src?.value != null) srcPoints.push({ v: src.value, w: src.volumeKt });
+        if (tgt?.value != null) tgtPoints.push({ v: tgt.value, w: tgt.volumeKt });
+        if (src?.value != null && tgt?.value != null) {
+          matchedSrc.push({ v: src.value, w: src.volumeKt });
+          matchedTgt.push({ v: tgt.value, w: tgt.volumeKt });
+        }
+        if (tgt?.volumeKt != null) volumeKt = (volumeKt ?? 0) + tgt.volumeKt;
+        impact += monthImpact(l, src, tgt);
       }
-      if (monthLines.length === 0) continue;
-      months.push({
-        periodLabel: p.label,
-        totalMusd: monthLines.reduce((s, l) => s + l.impactMusd, 0),
-        lines: monthLines,
+      if (!hasData) continue;
+      const isPrice = l.kind !== "amount";
+      // Preço origem/destino: média ponderada pelo kt do próprio lado/mês.
+      // Com meses pareados, as médias usam SÓ esses meses (mesma população
+      // dos dois lados) e Var = destino − origem; sem nenhum mês pareado,
+      // mostra a média de cada lado isoladamente, sem variação.
+      const hasMatched = matchedSrc.length > 0;
+      const sourceValue = isPrice
+        ? weightedAvg(hasMatched ? matchedSrc : srcPoints)
+        : null;
+      const targetValue = isPrice
+        ? weightedAvg(hasMatched ? matchedTgt : tgtPoints)
+        : null;
+      const varValue =
+        hasMatched && sourceValue != null && targetValue != null
+          ? targetValue - sourceValue
+          : null;
+      outLines.push({
+        id: l.id,
+        label: l.label,
+        ...(sourceValue != null ? { sourceValue } : {}),
+        ...(targetValue != null ? { targetValue } : {}),
+        ...(varValue != null ? { varValue } : {}),
+        ...(isPrice && volumeKt != null ? { volumeKt } : {}),
+        impactMusd: impact,
       });
     }
-    if (months.length === 0) continue;
-
-    // Linhas consolidadas: impacto e kt somados entre os meses; preços só
-    // quando o par cobre um único mês (somar preços não faz sentido).
-    const byLine = new Map<number, LineOut>();
-    for (const m of months) {
-      for (const l of m.lines) {
-        const cur = byLine.get(l.id);
-        if (!cur) {
-          byLine.set(
-            l.id,
-            singleMonth
-              ? { ...l }
-              : {
-                  id: l.id,
-                  label: l.label,
-                  ...(l.volumeKt != null ? { volumeKt: l.volumeKt } : {}),
-                  impactMusd: l.impactMusd,
-                },
-          );
-        } else {
-          cur.impactMusd += l.impactMusd;
-          if (l.volumeKt != null) cur.volumeKt = (cur.volumeKt ?? 0) + l.volumeKt;
-        }
-      }
-    }
+    if (outLines.length === 0) continue;
     out.push({
       id: ind.id,
       sourceId: requested.sourceId,
       targetId: requested.targetId,
       title: ind.title,
       unitLabel: ind.unitLabel,
-      totalMusd: months.reduce((s, m) => s + m.totalMusd, 0),
+      totalMusd: outLines.reduce((s, l) => s + l.impactMusd, 0),
       items: itemsByIndicator.get(ind.id) ?? [],
-      lines: [...byLine.values()],
-      months,
+      lines: outLines,
     });
   }
   return out;

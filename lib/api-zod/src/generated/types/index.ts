@@ -32,7 +32,6 @@ export * from './listMarketExplanationsParams';
 export * from './marketExplanation';
 export * from './marketExplanationLine';
 export * from './marketExplanationList';
-export * from './marketExplanationMonth';
 export * from './scenario';
 export * from './scenarioCatalog';
 export * from './scenarioPair';

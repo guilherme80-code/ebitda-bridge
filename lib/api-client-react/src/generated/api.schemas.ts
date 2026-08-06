@@ -34,7 +34,7 @@ export interface MarketExplanationLine {
   sourceValue?: number;
   /** Value in the target scenario. */
   targetValue?: number;
-  /** Variation between target and source, as imported. */
+  /** Variation derived at read time (targetValue - sourceValue), computed over the months with values on both sides. */
   varValue?: number;
   /** Impacted volume in kt. */
   volumeKt?: number;
@@ -43,18 +43,7 @@ export interface MarketExplanationLine {
 }
 
 /**
- * Per-month detail of an explanation when the requested pair covers more than one month (explanations are stored monthly; FY/quarter figures are the sum of the months).
- */
-export interface MarketExplanationMonth {
-  /** Month label (e.g. JAN26). */
-  periodLabel: string;
-  /** Sum of the month's line impacts in MUSD. */
-  totalMusd: number;
-  lines: MarketExplanationLine[];
-}
-
-/**
- * An imported explanation table (e.g. Iron Ores) for a scenario pair. Stored monthly; for FY/quarter pairs the lines and total are the sum of the months in the interval, and `months` carries the per-month detail. Price columns (source/target/var) are only present when the pair covers a single month.
+ * An imported explanation table (e.g. Iron Ores) for a scenario pair, as a single consolidated table. Stored monthly; for FY/quarter pairs impacts and kt are the sum of the months and price columns (source/target/var) are kt-weighted averages of the monthly values.
  */
 export interface MarketExplanation {
   id: number;
@@ -69,8 +58,6 @@ export interface MarketExplanation {
   /** Labels of the bridge items impacted by this explanation (e.g. Fines, Pellets, Lumps). */
   items: string[];
   lines: MarketExplanationLine[];
-  /** Per-month detail (one entry per month with imported data in the interval). */
-  months: MarketExplanationMonth[];
 }
 
 export interface MarketExplanationList {

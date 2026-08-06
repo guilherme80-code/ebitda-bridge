@@ -16,7 +16,7 @@ export interface MarketExplanationLine {
   sourceValue?: number;
   /** Value in the target scenario. */
   targetValue?: number;
-  /** Variation between target and source, as imported. */
+  /** Variation derived at read time (targetValue - sourceValue), computed over the months with values on both sides. */
   varValue?: number;
   /** Impacted volume in kt. */
   volumeKt?: number;

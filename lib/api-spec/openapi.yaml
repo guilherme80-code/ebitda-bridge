@@ -332,7 +332,7 @@ components:
           description: Value in the target scenario.
         varValue:
           type: number
-          description: Variation between target and source, as imported.
+          description: Variation derived at read time (targetValue - sourceValue), computed over the months with values on both sides.
         volumeKt:
           type: number
           description: Impacted volume in kt.
@@ -340,24 +340,9 @@ components:
           type: number
           description: Impact on the EBITDA variation, in MUSD ($m).
       required: [id, label, impactMusd]
-    MarketExplanationMonth:
-      type: object
-      description: Per-month detail of an explanation when the requested pair covers more than one month (explanations are stored monthly; FY/quarter figures are the sum of the months).
-      properties:
-        periodLabel:
-          type: string
-          description: Month label (e.g. JAN26).
-        totalMusd:
-          type: number
-          description: Sum of the month's line impacts in MUSD.
-        lines:
-          type: array
-          items:
-            $ref: "#/components/schemas/MarketExplanationLine"
-      required: [periodLabel, totalMusd, lines]
     MarketExplanation:
       type: object
-      description: An imported explanation table (e.g. Iron Ores) for a scenario pair. Stored monthly; for FY/quarter pairs the lines and total are the sum of the months in the interval, and `months` carries the per-month detail. Price columns (source/target/var) are only present when the pair covers a single month.
+      description: An imported explanation table (e.g. Iron Ores) for a scenario pair, as a single consolidated table. Stored monthly; for FY/quarter pairs impacts and kt are the sum of the months and price columns (source/target/var) are kt-weighted averages of the monthly values.
       properties:
         id:
           type: number
@@ -383,12 +368,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MarketExplanationLine"
-        months:
-          type: array
-          items:
-            $ref: "#/components/schemas/MarketExplanationMonth"
-          description: Per-month detail (one entry per month with imported data in the interval).
-      required: [id, sourceId, targetId, title, unitLabel, totalMusd, items, lines, months]
+      required: [id, sourceId, targetId, title, unitLabel, totalMusd, items, lines]
     MarketExplanationList:
       type: object
       properties:
