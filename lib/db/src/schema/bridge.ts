@@ -112,14 +112,10 @@ export const BRIDGE_DRIVERS = [
   { key: "usage", label: "Consumo (Usage)" },
   { key: "fixed_cost", label: "Custo fixo" },
   { key: "forex", label: "Câmbio" },
-  // "stock" só entra no bridge quando os dados trazem Stock Variation; nesse
-  // caso "sv_others" vira apenas "Outros" (diferença de fechamento restante).
-  { key: "stock", label: "Estoque" },
+  // Barra única combinando Variação de estoque e Outros; o detalhamento
+  // (drill-down) mostra os dois grupos separados.
   { key: "sv_others", label: "Estoque / Outros" },
 ] as const;
-
-/** Rótulo de sv_others quando a Stock Variation vem dos dados. */
-export const OTHERS_ONLY_LABEL = "Outros";
 
 export const insertScenarioSchema = createInsertSchema(scenariosTable);
 export type InsertScenario = z.infer<typeof insertScenarioSchema>;

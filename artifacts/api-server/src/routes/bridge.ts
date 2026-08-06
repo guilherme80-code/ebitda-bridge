@@ -9,22 +9,14 @@ import {
   inputPriceFactsTable,
   miscFactsTable,
   BRIDGE_DRIVERS,
-  OTHERS_ONLY_LABEL,
   type Scenario,
 } from "@workspace/db";
 
-/**
- * Alavancas a exibir para um bridge: "Estoque" só aparece quando os dados
- * trouxeram Stock Variation (chave "stock" presente em drivers); nesse caso
- * o plug "sv_others" passa a se chamar apenas "Outros".
- */
+/** Alavancas a exibir para um bridge (barra "Estoque / Outros" é única). */
 function bridgeDriverList(
-  drivers: Record<string, number>,
+  _drivers: Record<string, number>,
 ): { key: string; label: string }[] {
-  const hasStock = "stock" in drivers;
-  return BRIDGE_DRIVERS.filter((d) => d.key !== "stock" || hasStock).map((d) =>
-    hasStock && d.key === "sv_others" ? { key: d.key, label: OTHERS_ONLY_LABEL } : d,
-  );
+  return [...BRIDGE_DRIVERS];
 }
 
 /**

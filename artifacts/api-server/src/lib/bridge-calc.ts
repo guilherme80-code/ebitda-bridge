@@ -366,12 +366,9 @@ export function computeBridge(
   // Diferença de fechamento não justificada pela fonte: só existe quando os
   // dados trazem Stock Variation real (sem ela, o plug fecha por definição).
   const discrepancyK = hasStockData ? stockPlug - stock.total : 0;
-  const stockDetail: DetailLine[] = stock.lines.filter(
-    (l) => Math.abs(l.value) > 1e-9,
-  );
-  const othersDetail: DetailLine[] = others.lines
-    .map((l) => ({ ...l, group: "Outros" }))
-    .filter((l) => Math.abs(l.value) > 1e-9);
+  // Detalhe da barra única "Estoque / Outros": grupos separados. O ajuste de
+  // fechamento só entra quando não há Stock Variation real (com ela, a
+  // diferença vira "Não Explicado" no bridge, fora desta barra).
   const svDetail: DetailLine[] = [
     ...others.lines.map((l) => ({ ...l, group: "Outros" })),
     ...stock.lines.map((l, i) => ({
@@ -379,12 +376,16 @@ export function computeBridge(
       group: "Variação de estoque",
       sortOrder: 100 + i,
     })),
-    {
-      label: "Variação de estoque — ajuste de fechamento",
-      group: "Variação de estoque",
-      value: (stockPlug - stock.total) / K,
-      sortOrder: 999,
-    },
+    ...(hasStockData
+      ? []
+      : [
+          {
+            label: "Variação de estoque — ajuste de fechamento",
+            group: "Variação de estoque",
+            value: (stockPlug - stock.total) / K,
+            sortOrder: 999,
+          },
+        ]),
   ].filter((l) => Math.abs(l.value) > 1e-9);
 
   priceLines.sort((a, b) => b.value - a.value);
@@ -651,10 +652,10 @@ export function computeBridge(
       usage: usage.total / K,
       fixed_cost: fixedCost / K,
       forex: forex / K,
-      ...(hasStockData ? { stock: stock.total / K } : {}),
-      // Com Stock Variation real, "Outros" é só o valor vindo da fonte (não
-      // absorve a diferença de fechamento); sem ela, plug único que fecha.
-      sv_others: (hasStockData ? others.total : svOthers) / K,
+      // Barra única "Estoque / Outros": com Stock Variation real, soma o
+      // estoque dos dados + Outros da fonte (a diferença de fechamento vai
+      // para `discrepancy`); sem ela, plug único que fecha.
+      sv_others: (hasStockData ? others.total + stock.total : svOthers) / K,
     },
     details: {
       vol_mix: volMixDetail,
@@ -663,8 +664,7 @@ export function computeBridge(
       usage: usage.lines,
       fixed_cost: fixedDetail,
       forex: forexDetail,
-      ...(hasStockData ? { stock: stockDetail } : {}),
-      sv_others: hasStockData ? othersDetail : svDetail,
+      sv_others: svDetail,
     },
     tables,
   };

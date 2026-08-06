@@ -17,8 +17,7 @@ const discrepancy = -6.2;
 const openSteps: BridgeStep[] = [
   { key: 'ebitda_source', label: 'EBITDA FY26 Budget', value: 632, cumulative: 632, kind: 'total_start', hasDetail: false },
   { key: 'selling_price', label: 'Preço de venda', value: 100, cumulative: 732, kind: 'delta', hasDetail: true },
-  { key: 'stock', label: 'Estoque', value: 15, cumulative: 747, kind: 'delta', hasDetail: true },
-  { key: 'sv_others', label: 'Outros', value: 6.9, cumulative: 753.9, kind: 'delta', hasDetail: true },
+  { key: 'sv_others', label: 'Estoque / Outros', value: 21.9, cumulative: 753.9, kind: 'delta', hasDetail: true },
   { key: 'unexplained', label: 'Não Explicado', value: discrepancy, cumulative: 747.7, kind: 'delta', hasDetail: false },
   { key: 'ebitda_target', label: 'EBITDA FY26 MRF7', value: 747.7, cumulative: 747.7, kind: 'total_end', hasDetail: false },
 ];
@@ -27,15 +26,13 @@ const openSteps: BridgeStep[] = [
 const simOpenSteps: BridgeStep[] = openSteps.map((s) =>
   s.kind === 'delta' && s.key === 'selling_price'
     ? { ...s, value: 112.4, cumulative: 744.4 }
-    : s.key === 'stock'
-      ? { ...s, cumulative: 759.4 }
-      : s.key === 'sv_others'
-        ? { ...s, cumulative: 766.3 }
-        : s.key === 'unexplained'
-          ? { ...s, cumulative: 760.1 }
-          : s.kind === 'total_end'
-            ? { ...s, value: 760.1, cumulative: 760.1 }
-            : s,
+    : s.key === 'sv_others'
+      ? { ...s, cumulative: 766.3 }
+      : s.key === 'unexplained'
+        ? { ...s, cumulative: 760.1 }
+        : s.kind === 'total_end'
+          ? { ...s, value: 760.1, cumulative: 760.1 }
+          : s,
 );
 
 /** A cadeia é contínua e fecha exatamente no EBITDA destino. */
@@ -76,8 +73,8 @@ describe('applyExplanations', () => {
     const out = applyExplanations(openSteps, explained);
     const others = out.find((s) => s.key === 'sv_others')!;
     const unexp = out.find((s) => s.key === 'unexplained')!;
-    // Outros = valor da fonte + explicado (6.9 − 4 = 2.9), anotando o explicado.
-    expect(others.value).toBeCloseTo(6.9 + explained, 10);
+    // Estoque / Outros = valor da fonte + explicado (21.9 − 4 = 17.9), anotando o explicado.
+    expect(others.value).toBeCloseTo(21.9 + explained, 10);
     expect((others as { explainedMusd?: number }).explainedMusd).toBeCloseTo(explained, 10);
     expect(others.cumulative).toBeCloseTo(749.9, 10);
     // Não Explicado = diferença − explicado (−2.2), fechando no destino.
@@ -91,7 +88,7 @@ describe('applyExplanations', () => {
     expect(out.find((s) => s.key === 'unexplained')).toBeUndefined();
     expect(out).toHaveLength(openSteps.length - 1);
     const others = out.find((s) => s.key === 'sv_others')!;
-    expect(others.value).toBeCloseTo(6.9 + discrepancy, 10); // 0.7
+    expect(others.value).toBeCloseTo(21.9 + discrepancy, 10); // 15.7
     expect(others.cumulative).toBeCloseTo(747.7, 10);
     expectChainCloses(out);
     // Limiar de ~zero em ambos os lados.
@@ -113,8 +110,8 @@ describe('applyExplanations', () => {
     const simulated = applyExplanations(simOpenSteps, explained);
     expectChainCloses(original);
     expectChainCloses(simulated);
-    expect(original.find((s) => s.key === 'sv_others')!.value).toBeCloseTo(2.9, 10);
-    expect(simulated.find((s) => s.key === 'sv_others')!.value).toBeCloseTo(2.9, 10);
+    expect(original.find((s) => s.key === 'sv_others')!.value).toBeCloseTo(17.9, 10);
+    expect(simulated.find((s) => s.key === 'sv_others')!.value).toBeCloseTo(17.9, 10);
     expect(original.find((s) => s.key === 'unexplained')!.cumulative).toBeCloseTo(747.7, 10);
     expect(simulated.find((s) => s.key === 'unexplained')!.cumulative).toBeCloseTo(760.1, 10);
   });
@@ -128,7 +125,7 @@ describe('applyExplanations', () => {
     const noOthers = openSteps.filter((s) => s.key !== 'sv_others');
     // Série de referência sem Outros (o servidor teria mandado assim, fechada).
     const fixed = noOthers.map((s) =>
-      s.key === 'unexplained' ? { ...s, value: 0.7, cumulative: 747.7 } : s,
+      s.key === 'unexplained' ? { ...s, value: 15.7, cumulative: 747.7 } : s,
     );
     // Sem Outros para absorver o explicado, não há como manter o fechamento:
     // nada é ajustado (parcial, total e além da diferença).

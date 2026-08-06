@@ -23,7 +23,6 @@ const DRIVER_KEYS = [
   "usage",
   "fixed_cost",
   "forex",
-  "stock",
   "sv_others",
 ];
 
@@ -53,19 +52,16 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)
     usage: -12.829343372386798,
     fixed_cost: -34.29055851516902,
     forex: 70.57285860656927,
-    // O seed traz Stock Variation: "Estoque" recebe o valor real dos dados e
-    // "Outros" (sv_others) fica só com o valor vindo da fonte. A diferença de
-    // fechamento restante NÃO é absorvida por nenhum dos dois — vai para
+    // O seed traz Stock Variation: a barra única "Estoque / Outros" soma o
+    // estoque real dos dados (−3.8604…) com Outros da fonte (−5.7640…). A
+    // diferença de fechamento restante NÃO é absorvida pela barra — vai para
     // `discrepancy` (a coluna "Não Explicado" do bridge).
-    stock: -3.860422459599194,
-    sv_others: -5.7640203629386235,
+    sv_others: -3.860422459599194 + -5.7640203629386235,
   };
 
-  it("Estoque + Outros + diferença de fechamento = antigo plug único", () => {
+  it("Estoque/Outros + diferença de fechamento = antigo plug único", () => {
     expect(
-      (bridge.drivers["stock"] ?? 0) +
-        (bridge.drivers["sv_others"] ?? 0) +
-        bridge.discrepancy,
+      (bridge.drivers["sv_others"] ?? 0) + bridge.discrepancy,
     ).toBeCloseTo(-10.20121656225709, 6);
   });
 
@@ -73,15 +69,19 @@ describe("computeBridge — FY26 Budget → FY26 MRF7 (FY consolidado dos meses)
     expect(bridge.discrepancy).toBeCloseTo(-0.5767737397192718, 6);
   });
 
-  it("Estoque bate com a diferença das linhas de Stock Variation dos dados", () => {
+  it("detalhe da barra Estoque/Outros traz os dois grupos e soma o total", () => {
+    const lines = bridge.details["sv_others"];
+    const groups = new Set(lines.map((l) => l.group));
+    expect(groups.has("Outros")).toBe(true);
+    expect(groups.has("Variação de estoque")).toBe(true);
     const sumStock = (d: typeof source) =>
       d.misc
         .filter((m) => m.driver === "stock_variation")
         .reduce((s, m) => s + m.amountKusd, 0);
-    expect(bridge.drivers["stock"]).toBeCloseTo(
-      (sumStock(target) - sumStock(source)) / 1000,
-      9,
-    );
+    const stockLines = lines
+      .filter((l) => l.group === "Variação de estoque")
+      .reduce((s, l) => s + l.value, 0);
+    expect(stockLines).toBeCloseTo((sumStock(target) - sumStock(source)) / 1000, 9);
   });
 
   it("sem Stock Variation nos dados, volta ao plug único sv_others", () => {
