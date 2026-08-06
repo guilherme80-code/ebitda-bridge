@@ -1,20 +1,21 @@
 /**
- * Consolidação das EXPLICAÇÕES (ex.: Iron Ores) — armazenadas por mês, como a
- * fonte. Para um par FY/trimestre, o painel expande o par em pares mensais
- * (mês i da origem ↔ mês i do destino), soma os impactos por explicação e
- * linha, e devolve também o detalhe mês a mês.
+ * Consolidação das EXPLICAÇÕES (ex.: Iron Ores) — VALORES armazenados por
+ * versão e mês (como os indicadores); a diferença entre cenários e o impacto
+ * são calculados aqui, na leitura, depois da seleção do par. Para um par
+ * FY/trimestre, o painel expande o par em pares mensais (mês i da origem ↔
+ * mês i do destino), calcula cada mês e soma.
  *
  * Regras de consolidação:
  *  - impacto ($m) e volume (kt): somados entre os meses;
  *  - valores de preço (origem/destino/variação): mostrados apenas quando o
  *    par cobre um único mês — somar preços não faz sentido;
- *  - itens vinculados (Fines, Pellets...): união entre os meses;
- *  - unidade: a do primeiro mês (a importação garante consistência por par).
+ *  - itens vinculados (Fines, Pellets...): definidos por indicador.
  */
 import type {
-  MarketExplanation,
-  MarketExplanationLine,
-  MarketExplanationItem,
+  MarketIndicator,
+  MarketIndicatorLine,
+  MarketIndicatorValue,
+  MarketIndicatorItem,
 } from "@workspace/db";
 
 const MONTH_ID = /^fy(\d{2})_m(\d{2})_(.+)$/;
@@ -86,81 +87,106 @@ export type ConsolidatedExplanation = {
   months: { periodLabel: string; totalMusd: number; lines: LineOut[] }[];
 };
 
-function toLineOut(l: MarketExplanationLine): LineOut {
+/**
+ * Calcula a linha de um mês a partir dos VALORES por versão: variação =
+ * destino − origem; impacto = direction × variação × kt (linhas de preço,
+ * SEMPRE o kt do mês destino — sem fallback) ou direction × variação
+ * (linhas de montante em MUSD). Sem os dois valores não há impacto.
+ */
+function computeMonthLine(
+  line: MarketIndicatorLine,
+  src: MarketIndicatorValue | undefined,
+  tgt: MarketIndicatorValue | undefined,
+): LineOut | null {
+  if (!src && !tgt) return null;
+  const sv = src?.value ?? null;
+  const tv = tgt?.value ?? null;
+  const kt = tgt?.volumeKt ?? null;
+  const varValue = sv != null && tv != null ? tv - sv : null;
+  let impact = 0;
+  if (varValue != null) {
+    if (line.kind === "amount") impact = line.direction * varValue;
+    else if (kt != null) impact = line.direction * varValue * kt;
+  }
+  // Linhas de montante (MUSD): só o impacto interessa — os "níveis" internos
+  // não são preços e não devem aparecer nas colunas de preço do pop-up.
+  const isPrice = line.kind !== "amount";
   return {
-    id: l.id,
-    label: l.label,
-    ...(l.sourceValue != null ? { sourceValue: l.sourceValue } : {}),
-    ...(l.targetValue != null ? { targetValue: l.targetValue } : {}),
-    ...(l.varValue != null ? { varValue: l.varValue } : {}),
-    ...(l.volumeKt != null ? { volumeKt: l.volumeKt } : {}),
-    impactMusd: l.impactMusd,
+    id: line.id,
+    label: line.label,
+    ...(isPrice && sv != null ? { sourceValue: sv } : {}),
+    ...(isPrice && tv != null ? { targetValue: tv } : {}),
+    ...(isPrice && varValue != null ? { varValue } : {}),
+    ...(isPrice && kt != null ? { volumeKt: kt } : {}),
+    impactMusd: impact,
   };
 }
 
 /**
- * Consolida as explicações dos pares mensais do intervalo pedido. `heads`,
- * `lines` e `items` são as linhas cruas do banco para esses pares.
+ * Consolida os indicadores de explicação para os pares mensais pedidos.
+ * `values` são as linhas cruas de valores por cenário mensal dos dois lados.
  */
-export function consolidateMarketExplanations(
+export function consolidateMarketIndicators(
   requested: { sourceId: string; targetId: string },
   pairs: MonthPair[],
-  heads: MarketExplanation[],
-  lines: MarketExplanationLine[],
-  items: MarketExplanationItem[],
+  indicators: MarketIndicator[],
+  lines: MarketIndicatorLine[],
+  values: MarketIndicatorValue[],
+  items: MarketIndicatorItem[],
 ): ConsolidatedExplanation[] {
-  const linesByHead = new Map<number, MarketExplanationLine[]>();
+  const linesByIndicator = new Map<number, MarketIndicatorLine[]>();
   for (const l of lines) {
-    const arr = linesByHead.get(l.explanationId) ?? [];
+    const arr = linesByIndicator.get(l.indicatorId) ?? [];
     arr.push(l);
-    linesByHead.set(l.explanationId, arr);
+    linesByIndicator.set(l.indicatorId, arr);
   }
-  const itemsByHead = new Map<number, string[]>();
+  for (const arr of linesByIndicator.values()) {
+    arr.sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  }
+  const valueByLineScenario = new Map<string, MarketIndicatorValue>();
+  for (const v of values) valueByLineScenario.set(`${v.lineId}|${v.scenarioId}`, v);
+  const itemsByIndicator = new Map<number, string[]>();
   for (const i of items) {
-    const arr = itemsByHead.get(i.explanationId) ?? [];
+    const arr = itemsByIndicator.get(i.indicatorId) ?? [];
     arr.push(i.item);
-    itemsByHead.set(i.explanationId, arr);
-  }
-  const pairKey = (s: string, t: string) => `${s}→${t}`;
-  const pairIndex = new Map(pairs.map((p, i) => [pairKey(p.sourceId, p.targetId), i]));
-
-  // Agrupa cabeçalhos por título, na ordem (sortOrder, id) do primeiro mês.
-  type Group = { title: string; heads: { head: MarketExplanation; monthIdx: number }[] };
-  const groups = new Map<string, Group>();
-  const sortedHeads = [...heads].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
-  for (const h of sortedHeads) {
-    const idx = pairIndex.get(pairKey(h.sourceId, h.targetId));
-    if (idx === undefined) continue;
-    const g = groups.get(h.title) ?? { title: h.title, heads: [] };
-    g.heads.push({ head: h, monthIdx: idx });
-    groups.set(h.title, g);
+    itemsByIndicator.set(i.indicatorId, arr);
   }
 
+  const singleMonth = pairs.length === 1;
   const out: ConsolidatedExplanation[] = [];
-  for (const g of groups.values()) {
-    g.heads.sort((a, b) => a.monthIdx - b.monthIdx);
-    const first = g.heads[0].head;
-    const singleMonth = pairs.length === 1;
+  const sorted = [...indicators].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  for (const ind of sorted) {
+    const indLines = linesByIndicator.get(ind.id) ?? [];
+    const months: ConsolidatedExplanation["months"] = [];
+    for (const p of pairs) {
+      const monthLines: LineOut[] = [];
+      for (const l of indLines) {
+        const computed = computeMonthLine(
+          l,
+          valueByLineScenario.get(`${l.id}|${p.sourceId}`),
+          valueByLineScenario.get(`${l.id}|${p.targetId}`),
+        );
+        if (computed) monthLines.push(computed);
+      }
+      if (monthLines.length === 0) continue;
+      months.push({
+        periodLabel: p.label,
+        totalMusd: monthLines.reduce((s, l) => s + l.impactMusd, 0),
+        lines: monthLines,
+      });
+    }
+    if (months.length === 0) continue;
 
-    const months = g.heads.map(({ head, monthIdx }) => {
-      const myLines = (linesByHead.get(head.id) ?? []).sort(
-        (a, b) => a.sortOrder - b.sortOrder || a.id - b.id,
-      );
-      return {
-        periodLabel: pairs[monthIdx].label,
-        totalMusd: myLines.reduce((s, l) => s + l.impactMusd, 0),
-        lines: myLines.map(toLineOut),
-      };
-    });
-
-    // Linhas consolidadas: por rótulo, na ordem da primeira aparição.
-    const byLabel = new Map<string, { line: LineOut; ktSeen: boolean }>();
+    // Linhas consolidadas: impacto e kt somados entre os meses; preços só
+    // quando o par cobre um único mês (somar preços não faz sentido).
+    const byLine = new Map<number, LineOut>();
     for (const m of months) {
       for (const l of m.lines) {
-        const cur = byLabel.get(l.label);
+        const cur = byLine.get(l.id);
         if (!cur) {
-          byLabel.set(l.label, {
-            line: singleMonth
+          byLine.set(
+            l.id,
+            singleMonth
               ? { ...l }
               : {
                   id: l.id,
@@ -168,31 +194,22 @@ export function consolidateMarketExplanations(
                   ...(l.volumeKt != null ? { volumeKt: l.volumeKt } : {}),
                   impactMusd: l.impactMusd,
                 },
-            ktSeen: l.volumeKt != null,
-          });
+          );
         } else {
-          cur.line.impactMusd += l.impactMusd;
-          if (l.volumeKt != null) {
-            cur.line.volumeKt = (cur.line.volumeKt ?? 0) + l.volumeKt;
-            cur.ktSeen = true;
-          }
+          cur.impactMusd += l.impactMusd;
+          if (l.volumeKt != null) cur.volumeKt = (cur.volumeKt ?? 0) + l.volumeKt;
         }
       }
     }
-    const consolidated = [...byLabel.values()].map((c) => c.line);
-    const itemSet = new Set<string>();
-    for (const { head } of g.heads) {
-      for (const it of itemsByHead.get(head.id) ?? []) itemSet.add(it);
-    }
     out.push({
-      id: first.id,
+      id: ind.id,
       sourceId: requested.sourceId,
       targetId: requested.targetId,
-      title: g.title,
-      unitLabel: first.unitLabel,
+      title: ind.title,
+      unitLabel: ind.unitLabel,
       totalMusd: months.reduce((s, m) => s + m.totalMusd, 0),
-      items: [...itemSet],
-      lines: consolidated,
+      items: itemsByIndicator.get(ind.id) ?? [],
+      lines: [...byLine.values()],
       months,
     });
   }

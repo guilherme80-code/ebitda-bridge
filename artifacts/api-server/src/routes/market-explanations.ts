@@ -1,21 +1,23 @@
 import { Router, type IRouter } from "express";
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { asc, inArray } from "drizzle-orm";
 import {
   db,
-  marketExplanationsTable,
-  marketExplanationLinesTable,
-  marketExplanationItemsTable,
+  marketIndicatorsTable,
+  marketIndicatorLinesTable,
+  marketIndicatorValuesTable,
+  marketIndicatorItemsTable,
 } from "@workspace/db";
 import {
   monthPairsOf,
-  consolidateMarketExplanations,
+  consolidateMarketIndicators,
 } from "../lib/market-consolidate";
 
 const router: IRouter = Router();
 
 // GET /bridge/market-explanations?source&target — explicações importadas (ex.:
-// Iron Ores), armazenadas por mês. Para pares FY/trimestre, expande em pares
-// mensais, soma os impactos e devolve também o detalhe mês a mês.
+// Iron Ores). Os VALORES são armazenados por versão e mês; a diferença entre
+// os cenários e o impacto são calculados aqui, depois da seleção do par. Para
+// pares FY/trimestre, expande em pares mensais, calcula cada mês e soma.
 router.get("/bridge/market-explanations", async (req, res) => {
   const source = typeof req.query.source === "string" ? req.query.source : "";
   const target = typeof req.query.target === "string" ? req.query.target : "";
@@ -33,43 +35,43 @@ router.get("/bridge/market-explanations", async (req, res) => {
   }
   if (pairs.length === 0) return res.json({ explanations: [] });
 
-  const heads = await db
+  const scenarioIds = [
+    ...new Set(pairs.flatMap((p) => [p.sourceId, p.targetId])),
+  ];
+  const values = await db
     .select()
-    .from(marketExplanationsTable)
-    .where(
-      or(
-        ...pairs.map((p) =>
-          and(
-            eq(marketExplanationsTable.sourceId, p.sourceId),
-            eq(marketExplanationsTable.targetId, p.targetId),
-          ),
-        ),
-      ),
-    );
-  if (heads.length === 0) return res.json({ explanations: [] });
+    .from(marketIndicatorValuesTable)
+    .where(inArray(marketIndicatorValuesTable.scenarioId, scenarioIds));
+  if (values.length === 0) return res.json({ explanations: [] });
 
-  const ids = heads.map((h) => h.id);
-  const [lines, items] = await Promise.all([
+  const lineIds = [...new Set(values.map((v) => v.lineId))];
+  const lines = await db
+    .select()
+    .from(marketIndicatorLinesTable)
+    .where(inArray(marketIndicatorLinesTable.id, lineIds))
+    .orderBy(
+      asc(marketIndicatorLinesTable.sortOrder),
+      asc(marketIndicatorLinesTable.id),
+    );
+  const indicatorIds = [...new Set(lines.map((l) => l.indicatorId))];
+  const [indicators, items] = await Promise.all([
     db
       .select()
-      .from(marketExplanationLinesTable)
-      .where(inArray(marketExplanationLinesTable.explanationId, ids))
-      .orderBy(
-        asc(marketExplanationLinesTable.sortOrder),
-        asc(marketExplanationLinesTable.id),
-      ),
+      .from(marketIndicatorsTable)
+      .where(inArray(marketIndicatorsTable.id, indicatorIds)),
     db
       .select()
-      .from(marketExplanationItemsTable)
-      .where(inArray(marketExplanationItemsTable.explanationId, ids))
-      .orderBy(asc(marketExplanationItemsTable.id)),
+      .from(marketIndicatorItemsTable)
+      .where(inArray(marketIndicatorItemsTable.indicatorId, indicatorIds))
+      .orderBy(asc(marketIndicatorItemsTable.id)),
   ]);
 
-  const explanations = consolidateMarketExplanations(
+  const explanations = consolidateMarketIndicators(
     { sourceId: source, targetId: target },
     pairs,
-    heads,
+    indicators,
     lines,
+    values,
     items,
   );
   return res.json({ explanations });

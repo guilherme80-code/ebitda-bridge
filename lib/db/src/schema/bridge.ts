@@ -6,6 +6,7 @@ import {
   serial,
   text,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -199,6 +200,62 @@ export const marketExplanationItemsTable = pgTable("market_explanation_items", {
     .references(() => marketExplanationsTable.id, { onDelete: "cascade" }),
   item: text("item").notNull(), // label of the impacted bridge item
 });
+
+// Novo modelo (por versão): cada indicador (ex.: Iron Ores) tem linhas (ex.:
+// "Iron ore MB 62% (1m lag)") com VALORES armazenados por cenário MENSAL
+// (versão × mês) — como os indicadores. A diferença entre cenários e o
+// impacto ($m) são calculados na leitura, depois da seleção do par.
+export const marketIndicatorsTable = pgTable("market_indicators", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(), // e.g. "Iron Ores"
+  unitLabel: text("unit_label").notNull().default("Price $/t"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const marketIndicatorLinesTable = pgTable("market_indicator_lines", {
+  id: serial("id").primaryKey(),
+  indicatorId: integer("indicator_id")
+    .notNull()
+    .references(() => marketIndicatorsTable.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  // "price": valor é preço; impacto = direction × (destino − origem) × kt.
+  // "amount": valor é montante em MUSD; impacto = direction × (destino − origem).
+  kind: text("kind").notNull().default("price"),
+  // +1 quando o aumento do valor melhora o EBITDA; -1 quando piora (custo).
+  direction: integer("direction").notNull().default(-1),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const marketIndicatorValuesTable = pgTable(
+  "market_indicator_values",
+  {
+    id: serial("id").primaryKey(),
+    lineId: integer("line_id")
+      .notNull()
+      .references(() => marketIndicatorLinesTable.id, { onDelete: "cascade" }),
+    scenarioId: text("scenario_id").notNull(), // cenário MENSAL (fyNN_mMM_versao)
+    value: doublePrecision("value"),
+    volumeKt: doublePrecision("volume_kt"),
+  },
+  (t) => [unique().on(t.lineId, t.scenarioId)],
+);
+
+export const marketIndicatorItemsTable = pgTable("market_indicator_items", {
+  id: serial("id").primaryKey(),
+  indicatorId: integer("indicator_id")
+    .notNull()
+    .references(() => marketIndicatorsTable.id, { onDelete: "cascade" }),
+  item: text("item").notNull(), // label of the impacted bridge item
+});
+
+export type MarketIndicator = typeof marketIndicatorsTable.$inferSelect;
+export type InsertMarketIndicator = typeof marketIndicatorsTable.$inferInsert;
+export type MarketIndicatorLine = typeof marketIndicatorLinesTable.$inferSelect;
+export type InsertMarketIndicatorLine = typeof marketIndicatorLinesTable.$inferInsert;
+export type MarketIndicatorValue = typeof marketIndicatorValuesTable.$inferSelect;
+export type InsertMarketIndicatorValue = typeof marketIndicatorValuesTable.$inferInsert;
+export type MarketIndicatorItem = typeof marketIndicatorItemsTable.$inferSelect;
+export type InsertMarketIndicatorItem = typeof marketIndicatorItemsTable.$inferInsert;
 
 export const insertMarketExplanationSchema = createInsertSchema(
   marketExplanationsTable,

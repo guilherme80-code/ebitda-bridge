@@ -9,8 +9,13 @@ import {
   marketExplanationsTable,
   marketExplanationLinesTable,
   marketExplanationItemsTable,
+  marketIndicatorsTable,
+  marketIndicatorLinesTable,
+  marketIndicatorValuesTable,
+  marketIndicatorItemsTable,
 } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { convertLegacyMarketExplanations, type ConvertedIndicator } from "./market-migrate";
+import { inArray, sql } from "drizzle-orm";
 import seed from "../seed/bridge-seed.json";
 import { logger } from "./logger";
 
@@ -35,87 +40,124 @@ const SEED_LOCK_KEY = 764_211_003; // arbitrary app-wide advisory lock id
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-// Explicações de mercado (seções ausentes em seeds antigos são toleradas).
-// Os ids são preservados do dump para manter os vínculos linha/item.
-async function seedMarketExplanations(tx: Tx): Promise<void> {
-  for (const rows of chunk((seed as Record<string, unknown>).market_explanations as Row[] | undefined ?? [])) {
-    await tx.insert(marketExplanationsTable).values(
-      rows.map((r) => ({
-        id: num(r.id),
-        sourceId: String(r.source_id),
-        targetId: String(r.target_id),
-        title: String(r.title),
-        unitLabel: String(r.unit_label),
-        sortOrder: num(r.sort_order),
+// Indicadores de explicação (formato por versão): valores por linha × cenário
+// mensal. Seções ausentes em seeds antigos são toleradas.
+function seedIndicators(): ConvertedIndicator[] {
+  const raw = (seed as Record<string, unknown>).market_indicators as Row[] | undefined;
+  if (!raw) return [];
+  return raw.map((r) => ({
+    title: String(r.title),
+    unitLabel: String(r.unit_label),
+    sortOrder: num(r.sort_order),
+    items: (r.items as string[] | undefined) ?? [],
+    lines: ((r.lines as Row[] | undefined) ?? []).map((l) => ({
+      label: String(l.label),
+      kind: (l.kind === "amount" ? "amount" : "price") as "price" | "amount",
+      direction: (num(l.direction) >= 0 ? 1 : -1) as 1 | -1,
+      sortOrder: num(l.sort_order),
+      values: ((l.values as Row[] | undefined) ?? []).map((v) => ({
+        scenarioId: String(v.scenario_id),
+        value: numOrNull(v.value),
+        volumeKt: numOrNull(v.volume_kt),
       })),
-    );
+    })),
+  }));
+}
+
+async function insertIndicators(tx: Tx, indicators: ConvertedIndicator[]): Promise<void> {
+  for (const ind of indicators) {
+    const [head] = await tx
+      .insert(marketIndicatorsTable)
+      .values({ title: ind.title, unitLabel: ind.unitLabel, sortOrder: ind.sortOrder })
+      .returning({ id: marketIndicatorsTable.id });
+    for (const line of ind.lines) {
+      const [row] = await tx
+        .insert(marketIndicatorLinesTable)
+        .values({
+          indicatorId: head.id,
+          label: line.label,
+          kind: line.kind,
+          direction: line.direction,
+          sortOrder: line.sortOrder,
+        })
+        .returning({ id: marketIndicatorLinesTable.id });
+      for (const rows of chunk(line.values)) {
+        await tx.insert(marketIndicatorValuesTable).values(
+          rows.map((v) => ({
+            lineId: row.id,
+            scenarioId: v.scenarioId,
+            value: v.value,
+            volumeKt: v.volumeKt,
+          })),
+        );
+      }
+    }
+    if (ind.items.length > 0) {
+      await tx.insert(marketIndicatorItemsTable).values(
+        ind.items.map((item) => ({ indicatorId: head.id, item })),
+      );
+    }
   }
-  for (const rows of chunk((seed as Record<string, unknown>).market_explanation_lines as Row[] | undefined ?? [])) {
-    await tx.insert(marketExplanationLinesTable).values(
-      rows.map((r) => ({
-        explanationId: num(r.explanation_id),
-        label: String(r.label),
-        sourceValue: numOrNull(r.source_value),
-        targetValue: numOrNull(r.target_value),
-        varValue: numOrNull(r.var_value),
-        volumeKt: numOrNull(r.volume_kt),
-        impactMusd: num(r.impact_musd),
-        sortOrder: num(r.sort_order),
-      })),
-    );
-  }
-  for (const rows of chunk((seed as Record<string, unknown>).market_explanation_items as Row[] | undefined ?? [])) {
-    await tx.insert(marketExplanationItemsTable).values(
-      rows.map((r) => ({
-        explanationId: num(r.explanation_id),
-        item: String(r.item),
-      })),
-    );
-  }
-  // Reserva os ids já usados pelo dump na sequência da tabela.
-  await tx.execute(sql`
-    SELECT setval(
-      pg_get_serial_sequence('market_explanations', 'id'),
-      (SELECT COALESCE(MAX(id), 0) + 1 FROM market_explanations),
-      false
-    )
-  `);
+}
+
+/**
+ * Garante os indicadores de explicação no formato por versão:
+ *  - tabelas novas com dados → nada a fazer;
+ *  - tabelas legadas (pareadas) com dados → converte na própria base,
+ *    preservando dados importados pelo usuário;
+ *  - senão → semeia do dump bundled (quando presente).
+ * Roda sob a mesma trava de concorrência do seed.
+ */
+async function ensureMarketIndicators(): Promise<void> {
+  const existing = await db.select({ id: marketIndicatorsTable.id }).from(marketIndicatorsTable).limit(1);
+  if (existing.length > 0) return;
+  const legacyHeads = await db.select().from(marketExplanationsTable);
+  const fromSeed = seedIndicators();
+  if (legacyHeads.length === 0 && fromSeed.length === 0) return;
+
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
+    const check = await tx.select({ id: marketIndicatorsTable.id }).from(marketIndicatorsTable).limit(1);
+    if (check.length > 0) return;
+    if (legacyHeads.length > 0) {
+      logger.info("Convertendo explicações legadas (pareadas) para o formato por versão");
+      const isMonthly = (id: string) => /^fy\d{2}_m\d{2}_/.test(id);
+      const monthlyHeads = legacyHeads.filter(
+        (h) => isMonthly(h.sourceId) && isMonthly(h.targetId),
+      );
+      const headIds = monthlyHeads.map((h) => h.id);
+      if (headIds.length > 0) {
+        const [legacyLines, legacyItems] = await Promise.all([
+          tx
+            .select()
+            .from(marketExplanationLinesTable)
+            .where(inArray(marketExplanationLinesTable.explanationId, headIds)),
+          tx
+            .select()
+            .from(marketExplanationItemsTable)
+            .where(inArray(marketExplanationItemsTable.explanationId, headIds)),
+        ]);
+        await insertIndicators(
+          tx,
+          convertLegacyMarketExplanations(monthlyHeads, legacyLines, legacyItems),
+        );
+        return;
+      }
+    }
+    if (fromSeed.length > 0) {
+      logger.info("Backfill dos indicadores de explicação (seed)");
+      await insertIndicators(tx, fromSeed);
+    }
+  });
 }
 
 export async function seedIfEmpty(): Promise<void> {
   const existing = await db.select().from(scenariosTable).limit(1);
   if (existing.length > 0) {
-    // Banco já semeado por uma versão anterior: garante o backfill das
-    // explicações (tabelas novas ficam vazias após o upgrade de schema) e a
-    // migração do formato antigo (explicações guardadas por par FY/trimestre)
-    // para o formato mensal — o painel só lê pares mensais agora. Nunca
-    // sobrescreve dados já importados no formato mensal.
-    const marketHeads = await db
-      .select({ sourceId: marketExplanationsTable.sourceId })
-      .from(marketExplanationsTable);
-    const isMonthly = (id: string) => /^fy\d{2}_m\d{2}_/.test(id);
-    const onlyLegacy =
-      marketHeads.length > 0 && marketHeads.every((h) => !isMonthly(h.sourceId));
-    const seedHasMarket =
-      (((seed as Record<string, unknown>).market_explanations as Row[] | undefined) ?? []).length > 0;
-    if ((marketHeads.length === 0 || onlyLegacy) && seedHasMarket) {
-      logger.info(
-        marketHeads.length === 0
-          ? "Backfill das explicações (seed)"
-          : "Migrando explicações do formato por período para o mensal (seed)",
-      );
-      await db.transaction(async (tx) => {
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
-        const check = await tx
-          .select({ sourceId: marketExplanationsTable.sourceId })
-          .from(marketExplanationsTable);
-        if (check.some((h) => isMonthly(h.sourceId))) return;
-        await tx.delete(marketExplanationItemsTable);
-        await tx.delete(marketExplanationLinesTable);
-        await tx.delete(marketExplanationsTable);
-        await seedMarketExplanations(tx);
-      });
-    }
+    // Banco já semeado por uma versão anterior: garante os indicadores de
+    // explicação no formato por versão (convertendo dados legados ou
+    // semeando do dump). Nunca sobrescreve dados já no formato novo.
+    await ensureMarketIndicators();
     return;
   }
 
@@ -206,7 +248,7 @@ export async function seedIfEmpty(): Promise<void> {
         })),
       );
     }
-    await seedMarketExplanations(tx);
+    await insertIndicators(tx, seedIndicators());
   });
 
   logger.info("Seed do bridge concluído");

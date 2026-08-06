@@ -1,12 +1,17 @@
 /**
- * Núcleo compartilhado da importação de EXPLICAÇÕES DE MERCADO.
+ * Núcleo compartilhado da importação das EXPLICAÇÕES (indicadores de mercado).
+ *
+ * Formato por VERSÃO (como os indicadores): cada linha da fonte traz o valor
+ * de uma linha do indicador (ex.: "Iron ore MB 62% (1m lag)") para uma versão
+ * e um mês. A diferença entre cenários e o impacto são calculados pelo painel
+ * na leitura, depois da seleção do par — nada de valores pareados.
  *
  * Fonte com duas partes:
- *   - "Explicacoes": linhas das tabelas de mercado (ex.: Iron Ores), com
- *     valores do cenário origem/destino, variação, volume (kt) e impacto ($m),
- *     por par de cenários;
- *   - "Itens": relação Item × Explicação — quais itens do bridge (ex.: Fines,
- *     Pellets, Lumps) são impactados por cada explicação.
+ *   - "Explicacoes": versao | periodo | explicacao | linha | valor | kt (opc.)
+ *     | tipo (opc.: "preco" ou "valor", padrão "preco") | sentido (opc.: +1 ou
+ *     -1, padrão -1 = custo) | unidade (opc.);
+ *   - "Itens": explicacao | item — quais itens do bridge (ex.: Fines, Pellets)
+ *     abrem cada explicação.
  *
  * Erros de formato interrompem tudo apontando a linha problemática; nada é
  * gravado fora da transação. Mesmo padrão do indicadores-core.ts.
@@ -18,28 +23,20 @@ import {
   marketExplanationsTable,
   marketExplanationLinesTable,
   marketExplanationItemsTable,
-  type InsertMarketExplanation,
-  type InsertMarketExplanationLine,
-  type InsertMarketExplanationItem,
+  marketIndicatorsTable,
+  marketIndicatorLinesTable,
+  marketIndicatorValuesTable,
+  marketIndicatorItemsTable,
 } from "@workspace/db";
 
 export const COLUNAS_EXPLICACOES = [
-  "versao_origem",
-  "periodo_origem",
-  "versao_destino",
-  "periodo_destino",
+  "versao",
+  "periodo",
   "explicacao",
   "linha",
-  "impacto_musd",
+  "valor",
 ] as const;
-export const COLUNAS_ITENS = [
-  "versao_origem",
-  "periodo_origem",
-  "versao_destino",
-  "periodo_destino",
-  "explicacao",
-  "item",
-] as const;
+export const COLUNAS_ITENS = ["explicacao", "item"] as const;
 
 const VERSIONS = [
   "ACTUAL",
@@ -90,8 +87,8 @@ export function scenarioIdDe(
 }
 
 /**
- * As explicações são armazenadas POR MÊS (a fonte é mensal, como as demais
- * fontes do painel); FY e trimestres são somados na leitura. Rejeita períodos
+ * Os valores são armazenados POR MÊS (a fonte é mensal, como as demais fontes
+ * do painel); FY e trimestres são derivados na leitura. Rejeita períodos
  * FY/trimestre na importação.
  */
 export function exigirMensal(
@@ -103,31 +100,27 @@ export function exigirMensal(
   if (!/^fy\d{2}_m\d{2}_/.test(id)) {
     fazErro(rotulo)(
       linha,
-      `${campo} deve ser um mês (JAN26..DEC26) — as explicações são armazenadas ` +
-        `por mês e somadas pelo painel para FY/trimestre`,
+      `${campo} deve ser um mês (JAN26..DEC26) — os valores das explicações são ` +
+        `armazenados por mês e consolidados pelo painel para FY/trimestre`,
     );
   }
   return id;
 }
 
-export type RegistroExplicacao = {
+export type RegistroValor = {
   linha: number;
-  sourceId: string;
-  targetId: string;
+  scenarioId: string;
   explicacao: string;
   unidade: string | null;
   rotuloLinha: string;
-  valorOrigem: number | null;
-  valorDestino: number | null;
-  variacao: number | null;
+  tipo: "price" | "amount";
+  sentido: 1 | -1;
+  valor: number;
   kt: number | null;
-  impactoMusd: number;
 };
 
 export type RegistroItem = {
   linha: number;
-  sourceId: string;
-  targetId: string;
   explicacao: string;
   item: string;
 };
@@ -157,56 +150,55 @@ function numeroOpcional(
   return v as number;
 }
 
-export function validarLinhaExplicacao(
+export function validarLinhaValor(
   r: Record<string, unknown>,
   posicao: number,
   rotulo: Rotulador,
-): RegistroExplicacao {
+): RegistroValor {
   const erro = fazErro(rotulo);
   const linha = posicao;
-  const sourceId = exigirMensal(
+  const scenarioId = exigirMensal(
     scenarioIdDe(
-      texto(r, "versao_origem", linha, erro),
-      texto(r, "periodo_origem", linha, erro),
+      texto(r, "versao", linha, erro),
+      texto(r, "periodo", linha, erro),
       linha,
       rotulo,
     ),
-    "periodo_origem",
+    "periodo",
     linha,
     rotulo,
   );
-  const targetId = exigirMensal(
-    scenarioIdDe(
-      texto(r, "versao_destino", linha, erro),
-      texto(r, "periodo_destino", linha, erro),
-      linha,
-      rotulo,
-    ),
-    "periodo_destino",
-    linha,
-    rotulo,
-  );
-  if (sourceId === targetId) {
-    erro(linha, `cenários de origem e destino iguais (${sourceId})`);
+  const valor = r.valor;
+  if (typeof valor !== "number" || !Number.isFinite(valor)) {
+    erro(linha, `coluna "valor" não numérica: "${String(valor)}"`);
   }
-  const impacto = r.impacto_musd;
-  if (typeof impacto !== "number" || !Number.isFinite(impacto)) {
-    erro(linha, `coluna "impacto_musd" não numérica: "${String(impacto)}"`);
+  let tipo: "price" | "amount" = "price";
+  if (r.tipo !== null && r.tipo !== undefined && r.tipo !== "") {
+    const t = String(r.tipo).trim().toLowerCase();
+    if (t === "preco" || t === "preço" || t === "price") tipo = "price";
+    else if (t === "valor" || t === "montante" || t === "amount") tipo = "amount";
+    else erro(linha, `coluna "tipo" inválida: "${String(r.tipo)}" (esperado "preco" ou "valor")`);
+  }
+  let sentido: 1 | -1 = -1;
+  const sentidoNum = numeroOpcional(r, "sentido", linha, erro);
+  if (sentidoNum !== null) {
+    if (sentidoNum !== 1 && sentidoNum !== -1) {
+      erro(linha, `coluna "sentido" inválida: "${sentidoNum}" (esperado 1 ou -1)`);
+    }
+    sentido = sentidoNum as 1 | -1;
   }
   const unidade =
     typeof r.unidade === "string" && r.unidade.trim() !== "" ? r.unidade.trim() : null;
   return {
     linha,
-    sourceId,
-    targetId,
+    scenarioId,
     explicacao: texto(r, "explicacao", linha, erro),
     unidade,
     rotuloLinha: texto(r, "linha", linha, erro),
-    valorOrigem: numeroOpcional(r, "valor_origem", linha, erro),
-    valorDestino: numeroOpcional(r, "valor_destino", linha, erro),
-    variacao: numeroOpcional(r, "variacao", linha, erro),
+    tipo,
+    sentido,
+    valor: valor as number,
     kt: numeroOpcional(r, "kt", linha, erro),
-    impactoMusd: impacto as number,
   };
 }
 
@@ -219,126 +211,128 @@ export function validarLinhaItem(
   const linha = posicao;
   return {
     linha,
-    sourceId: exigirMensal(
-      scenarioIdDe(
-        texto(r, "versao_origem", linha, erro),
-        texto(r, "periodo_origem", linha, erro),
-        linha,
-        rotulo,
-      ),
-      "periodo_origem",
-      linha,
-      rotulo,
-    ),
-    targetId: exigirMensal(
-      scenarioIdDe(
-        texto(r, "versao_destino", linha, erro),
-        texto(r, "periodo_destino", linha, erro),
-        linha,
-        rotulo,
-      ),
-      "periodo_destino",
-      linha,
-      rotulo,
-    ),
     explicacao: texto(r, "explicacao", linha, erro),
     item: texto(r, "item", linha, erro),
   };
 }
 
-export type DadosMercado = {
-  explanations: InsertMarketExplanation[];
-  // linhas e itens indexados pela posição da explicação em `explanations`
-  lines: (InsertMarketExplanationLine & { explanationIndex: number })[];
-  items: (InsertMarketExplanationItem & { explanationIndex: number })[];
+export type LinhaIndicador = {
+  label: string;
+  kind: "price" | "amount";
+  direction: 1 | -1;
+  sortOrder: number;
+  values: { scenarioId: string; value: number; volumeKt: number | null }[];
 };
 
-/** Agrupa registros validados por (par, explicação) e monta os inserts. */
+export type IndicadorMercado = {
+  title: string;
+  unitLabel: string;
+  sortOrder: number;
+  lines: LinhaIndicador[];
+  items: string[];
+};
+
+/** Agrupa registros validados por explicação/linha e monta os indicadores. */
 export function montarDadosMercado(
-  explicacoes: RegistroExplicacao[],
+  valores: RegistroValor[],
   itens: RegistroItem[],
-  rotuloExplicacao: Rotulador,
+  rotuloValor: Rotulador,
   rotuloItem: Rotulador,
-): DadosMercado {
+): IndicadorMercado[] {
+  const erroValor = fazErro(rotuloValor);
   const erroItem = fazErro(rotuloItem);
-  const erroExp = fazErro(rotuloExplicacao);
 
-  const chave = (sourceId: string, targetId: string, titulo: string) =>
-    `${sourceId}→${targetId}|${titulo}`;
+  const indicadores = new Map<string, IndicadorMercado>();
+  const linhas = new Map<string, LinhaIndicador>();
+  const vistoValor = new Set<string>();
 
-  const explanations: InsertMarketExplanation[] = [];
-  const indexPorChave = new Map<string, number>();
-  const lines: DadosMercado["lines"] = [];
-  const vistoLinha = new Set<string>();
-
-  for (const r of explicacoes) {
-    const k = chave(r.sourceId, r.targetId, r.explicacao);
-    let idx = indexPorChave.get(k);
-    if (idx === undefined) {
-      idx = explanations.length;
-      indexPorChave.set(k, idx);
-      explanations.push({
-        sourceId: r.sourceId,
-        targetId: r.targetId,
+  for (const r of valores) {
+    let ind = indicadores.get(r.explicacao);
+    if (!ind) {
+      ind = {
         title: r.explicacao,
         unitLabel: r.unidade ?? "Price $/t",
-        sortOrder: idx,
-      });
-    } else if (r.unidade && r.unidade !== explanations[idx].unitLabel) {
-      erroExp(
+        sortOrder: indicadores.size,
+        lines: [],
+        items: [],
+      };
+      indicadores.set(r.explicacao, ind);
+    } else if (r.unidade && r.unidade !== ind.unitLabel) {
+      erroValor(
         r.linha,
         `explicação "${r.explicacao}" com unidade inconsistente entre as linhas ` +
-          `("${explanations[idx].unitLabel}" ≠ "${r.unidade}")`,
+          `("${ind.unitLabel}" ≠ "${r.unidade}")`,
       );
     }
-    const kl = `${k}|${r.rotuloLinha}`;
-    if (vistoLinha.has(kl)) {
-      erroExp(r.linha, `linha "${r.rotuloLinha}" duplicada na explicação "${r.explicacao}"`);
+    const kl = `${r.explicacao}|${r.rotuloLinha}`;
+    let line = linhas.get(kl);
+    if (!line) {
+      line = {
+        label: r.rotuloLinha,
+        kind: r.tipo,
+        direction: r.sentido,
+        sortOrder: ind.lines.length,
+        values: [],
+      };
+      linhas.set(kl, line);
+      ind.lines.push(line);
+    } else {
+      if (line.kind !== r.tipo) {
+        erroValor(
+          r.linha,
+          `linha "${r.rotuloLinha}" da explicação "${r.explicacao}" com tipo ` +
+            `inconsistente entre os meses ("${line.kind}" ≠ "${r.tipo}")`,
+        );
+      }
+      if (line.direction !== r.sentido) {
+        erroValor(
+          r.linha,
+          `linha "${r.rotuloLinha}" da explicação "${r.explicacao}" com sentido ` +
+            `inconsistente entre os meses (${line.direction} ≠ ${r.sentido})`,
+        );
+      }
     }
-    vistoLinha.add(kl);
-    lines.push({
-      explanationIndex: idx,
-      explanationId: 0, // resolvido na gravação
-      label: r.rotuloLinha,
-      sourceValue: r.valorOrigem,
-      targetValue: r.valorDestino,
-      varValue: r.variacao,
-      volumeKt: r.kt,
-      impactMusd: r.impactoMusd,
-      sortOrder: lines.filter((l) => l.explanationIndex === idx).length,
-    });
+    const kv = `${kl}|${r.scenarioId}`;
+    if (vistoValor.has(kv)) {
+      erroValor(
+        r.linha,
+        `valor duplicado para a linha "${r.rotuloLinha}" da explicação ` +
+          `"${r.explicacao}" no cenário ${r.scenarioId}`,
+      );
+    }
+    vistoValor.add(kv);
+    line.values.push({ scenarioId: r.scenarioId, value: r.valor, volumeKt: r.kt });
   }
 
-  const items: DadosMercado["items"] = [];
   const vistoItem = new Set<string>();
   for (const r of itens) {
-    const k = chave(r.sourceId, r.targetId, r.explicacao);
-    const idx = indexPorChave.get(k);
-    if (idx === undefined) {
+    const ind = indicadores.get(r.explicacao);
+    if (!ind) {
       erroItem(
         r.linha,
-        `item "${r.item}" referencia explicação inexistente "${r.explicacao}" ` +
-          `para o par ${r.sourceId} → ${r.targetId}`,
+        `item "${r.item}" referencia explicação inexistente "${r.explicacao}"`,
       );
     }
-    const ki = `${k}|${r.item}`;
+    const ki = `${r.explicacao}|${r.item}`;
     if (vistoItem.has(ki)) {
       erroItem(r.linha, `item "${r.item}" duplicado na explicação "${r.explicacao}"`);
     }
     vistoItem.add(ki);
-    items.push({ explanationIndex: idx!, explanationId: 0, item: r.item });
+    ind!.items.push(r.item);
   }
 
-  return { explanations, lines, items };
+  return [...indicadores.values()];
 }
 
 /**
  * Confere se todos os cenários mensais referenciados existem no catálogo do
  * painel (a base guarda apenas cenários mensais; FY/Q são derivados na leitura).
  */
-export async function conferirCenarios(d: DadosMercado): Promise<void> {
+export async function conferirCenarios(indicadores: IndicadorMercado[]): Promise<void> {
   const ids = [
-    ...new Set(d.explanations.flatMap((e) => [e.sourceId, e.targetId])),
+    ...new Set(
+      indicadores.flatMap((i) => i.lines.flatMap((l) => l.values.map((v) => v.scenarioId))),
+    ),
   ];
   if (ids.length === 0) return;
   const todos = await db.select({ id: scenariosTable.id }).from(scenariosTable);
@@ -352,36 +346,50 @@ export async function conferirCenarios(d: DadosMercado): Promise<void> {
   }
 }
 
-/** Substitui TODAS as explicações de mercado dentro de uma única transação. */
-export async function gravarDadosMercado(d: DadosMercado): Promise<void> {
-  await conferirCenarios(d);
+/**
+ * Substitui TODOS os indicadores de explicação dentro de uma única transação.
+ * Também limpa as tabelas legadas (pareadas) para não deixar dados obsoletos.
+ */
+export async function gravarDadosMercado(indicadores: IndicadorMercado[]): Promise<void> {
+  await conferirCenarios(indicadores);
   await db.transaction(async (tx) => {
+    await tx.delete(marketIndicatorItemsTable);
+    await tx.delete(marketIndicatorValuesTable);
+    await tx.delete(marketIndicatorLinesTable);
+    await tx.delete(marketIndicatorsTable);
     await tx.delete(marketExplanationItemsTable);
     await tx.delete(marketExplanationLinesTable);
     await tx.delete(marketExplanationsTable);
-    const ids: number[] = [];
-    for (const e of d.explanations) {
-      const [row] = await tx
-        .insert(marketExplanationsTable)
-        .values(e)
-        .returning({ id: marketExplanationsTable.id });
-      ids.push(row.id);
-    }
-    if (d.lines.length > 0) {
-      await tx.insert(marketExplanationLinesTable).values(
-        d.lines.map(({ explanationIndex, ...l }) => ({
-          ...l,
-          explanationId: ids[explanationIndex],
-        })),
-      );
-    }
-    if (d.items.length > 0) {
-      await tx.insert(marketExplanationItemsTable).values(
-        d.items.map(({ explanationIndex, ...i }) => ({
-          ...i,
-          explanationId: ids[explanationIndex],
-        })),
-      );
+    for (const ind of indicadores) {
+      const [head] = await tx
+        .insert(marketIndicatorsTable)
+        .values({ title: ind.title, unitLabel: ind.unitLabel, sortOrder: ind.sortOrder })
+        .returning({ id: marketIndicatorsTable.id });
+      for (const line of ind.lines) {
+        const [row] = await tx
+          .insert(marketIndicatorLinesTable)
+          .values({
+            indicatorId: head.id,
+            label: line.label,
+            kind: line.kind,
+            direction: line.direction,
+            sortOrder: line.sortOrder,
+          })
+          .returning({ id: marketIndicatorLinesTable.id });
+        await tx.insert(marketIndicatorValuesTable).values(
+          line.values.map((v) => ({
+            lineId: row.id,
+            scenarioId: v.scenarioId,
+            value: v.value,
+            volumeKt: v.volumeKt,
+          })),
+        );
+      }
+      if (ind.items.length > 0) {
+        await tx.insert(marketIndicatorItemsTable).values(
+          ind.items.map((item) => ({ indicatorId: head.id, item })),
+        );
+      }
     }
   });
 }
@@ -390,9 +398,15 @@ export async function fecharConexao(): Promise<void> {
   await pool.end();
 }
 
-export function resumoMercado(d: DadosMercado): string {
+export function resumoMercado(indicadores: IndicadorMercado[]): string {
+  const nLinhas = indicadores.reduce((s, i) => s + i.lines.length, 0);
+  const nValores = indicadores.reduce(
+    (s, i) => s + i.lines.reduce((a, l) => a + l.values.length, 0),
+    0,
+  );
+  const nItens = indicadores.reduce((s, i) => s + i.items.length, 0);
   return (
-    `Validado: ${d.explanations.length} explicações | ` +
-    `${d.lines.length} linhas | ${d.items.length} vínculos item × explicação`
+    `Validado: ${indicadores.length} explicações | ${nLinhas} linhas | ` +
+    `${nValores} valores (versão × mês) | ${nItens} vínculos item × explicação`
   );
 }

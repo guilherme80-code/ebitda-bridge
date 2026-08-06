@@ -1,15 +1,15 @@
 /**
- * Importa as EXPLICAÇÕES DE MERCADO do painel Bridge de EBITDA a partir de um
- * Excel com duas abas:
- *   - "Explicacoes": versao_origem | periodo_origem | versao_destino |
- *     periodo_destino | explicacao | linha | valor_origem | valor_destino |
- *     variacao | kt | impacto_musd | unidade (opcional)
- *   - "Itens": versao_origem | periodo_origem | versao_destino |
- *     periodo_destino | explicacao | item
+ * Importa as EXPLICAÇÕES (indicadores de mercado) do painel Bridge de EBITDA a
+ * partir de um Excel com duas abas — formato por VERSÃO: um valor por linha do
+ * indicador × versão × mês; a diferença entre cenários é calculada pelo painel
+ * depois da seleção do par.
+ *   - "Explicacoes": versao | periodo | explicacao | linha | valor | kt (opc.)
+ *     | tipo (opc.: "preco" ou "valor") | sentido (opc.: 1 ou -1) | unidade (opc.)
+ *   - "Itens": explicacao | item
  *
  * As validações vivem em market-explanations-core.ts. Erros de formato apontam
  * a linha da planilha; nada é gravado fora da transação. A importação substitui
- * todas as explicações de mercado existentes.
+ * todas as explicações existentes.
  *
  * Uso: pnpm --filter @workspace/scripts run import-market-explanations [caminho.xlsx]
  */
@@ -19,7 +19,7 @@ import * as XLSX from "xlsx";
 import {
   COLUNAS_EXPLICACOES,
   COLUNAS_ITENS,
-  validarLinhaExplicacao,
+  validarLinhaValor,
   validarLinhaItem,
   montarDadosMercado,
   gravarDadosMercado,
@@ -75,7 +75,7 @@ async function main() {
   const rotuloItem: Rotulador = (l) => `Aba "${SHEET_ITENS}", linha ${l}`;
 
   // linha na planilha: +1 do cabeçalho, +1 para 1-based
-  const explicacoes = rawExp.map((r, i) => validarLinhaExplicacao(r, i + 2, rotuloExp));
+  const explicacoes = rawExp.map((r, i) => validarLinhaValor(r, i + 2, rotuloExp));
   const itens = rawItens.map((r, i) => validarLinhaItem(r, i + 2, rotuloItem));
 
   const dados = montarDadosMercado(explicacoes, itens, rotuloExp, rotuloItem);
