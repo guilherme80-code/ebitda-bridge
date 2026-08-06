@@ -205,6 +205,22 @@ const CustomTooltip = ({ active, payload }: any) => {
               </span>
             </div>
           )}
+          {data.explainedMusd !== undefined && Math.abs(data.explainedMusd) > 1e-9 && (
+            <>
+              <div className="flex justify-between items-center text-sm mt-1.5">
+                <span className="text-slate-500 font-medium">Valor da fonte</span>
+                <span className="font-bold text-slate-700 font-mono">
+                  {data.value - data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.value - data.explainedMusd)} MUSD
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-500 font-medium">Explicado (painel)</span>
+                <span className="font-bold text-slate-700 font-mono">
+                  {data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.explainedMusd)} MUSD
+                </span>
+              </div>
+            </>
+          )}
         </div>
       );
     }
@@ -225,13 +241,21 @@ const CustomTooltip = ({ active, payload }: any) => {
             Parte da variação ainda sem explicação registrada no painel abaixo.
           </p>
         )}
-        {data.key === 'unexplained' && data.explainedMusd !== undefined && Math.abs(data.explainedMusd) > 1e-9 && (
-          <div className="flex justify-between items-center text-sm mb-1.5">
-            <span className="text-slate-500 font-medium">Explicado</span>
-            <span className="font-bold text-slate-700 font-mono">
-              {data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.explainedMusd)} MUSD
-            </span>
-          </div>
+        {data.explainedMusd !== undefined && Math.abs(data.explainedMusd) > 1e-9 && (
+          <>
+            <div className="flex justify-between items-center text-sm mb-1.5">
+              <span className="text-slate-500 font-medium">Valor da fonte</span>
+              <span className="font-bold text-slate-700 font-mono">
+                {data.value - data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.value - data.explainedMusd)} MUSD
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-sm mb-1.5">
+              <span className="text-slate-500 font-medium">Explicado (painel)</span>
+              <span className="font-bold text-slate-700 font-mono">
+                {data.explainedMusd > 0 ? '+' : ''}{formatMUSD(data.explainedMusd)} MUSD
+              </span>
+            </div>
+          </>
         )}
         {!data.isTotal && data.key !== 'unexplained' && (
           <div className="flex justify-between items-center text-sm">
@@ -307,13 +331,13 @@ export function WaterfallChart({ steps, baseSteps, explainedTotal, onBarClick }:
       }
       const simRange: [number, number] = [Math.min(start, end), Math.max(start, end)];
 
-      // Trecho já explicado da coluna "Não Explicado": do fim do resíduo até
-      // onde a coluna original terminaria (resíduo + explicado).
+      // Trecho explicado somado na barra "Outros": entre onde a barra só com
+      // o valor da fonte terminaria (cumulative − explicado) e o fim atual.
       const explainedMusd = (step as { explainedMusd?: number }).explainedMusd;
       let explainedRange: [number, number] | undefined;
       if (explainedMusd !== undefined && Math.abs(explainedMusd) > 1e-9 && !isTotal) {
         const expStart = step.cumulative;
-        const expEnd = step.cumulative + explainedMusd;
+        const expEnd = step.cumulative - explainedMusd;
         explainedRange = [Math.min(expStart, expEnd), Math.max(expStart, expEnd)];
       }
 

@@ -38,6 +38,18 @@ const simOpenSteps: BridgeStep[] = openSteps.map((s) =>
             : s,
 );
 
+/** A cadeia é contínua e fecha exatamente no EBITDA destino. */
+function expectChainCloses(steps: BridgeStep[]) {
+  for (let i = 1; i < steps.length; i++) {
+    const s = steps[i];
+    if (s.kind !== 'delta') continue;
+    expect(s.cumulative).toBeCloseTo(steps[i - 1].cumulative + s.value, 9);
+  }
+  const end = steps[steps.length - 1];
+  const lastDelta = [...steps].reverse().find((s) => s.kind === 'delta')!;
+  expect(lastDelta.cumulative).toBeCloseTo(end.value, 9);
+}
+
 describe('discrepancyOf', () => {
   it('retorna o valor do passo Não Explicado quando o bridge não fecha', () => {
     expect(discrepancyOf(openSteps)).toBeCloseTo(discrepancy, 10);
@@ -53,57 +65,77 @@ describe('applyExplanations', () => {
     expect(applyExplanations(closedSteps, -4)).toEqual(closedSteps);
   });
 
-  it('sem explicações: coluna mostra a diferença de fechamento inteira', () => {
+  it('sem explicações (0): passos idênticos aos do servidor, cadeia fecha', () => {
     const out = applyExplanations(openSteps, 0);
-    const idx = out.findIndex((s) => s.key === 'unexplained');
-    expect(idx).toBe(out.findIndex((s) => s.kind === 'total_end') - 1);
-    expect(out[idx].value).toBeCloseTo(discrepancy, 10);
-    expect(out[idx].cumulative).toBeCloseTo(747.7, 10);
+    expect(out).toEqual(openSteps);
+    expectChainCloses(out);
   });
 
-  it('explicação parcial: resíduo = diferença − explicado, cadeia contínua', () => {
-    const out = applyExplanations(openSteps, -4);
-    const idx = out.findIndex((s) => s.key === 'unexplained');
-    const step = out[idx];
-    expect(step.value).toBeCloseTo(discrepancy - -4, 10); // -2.2
-    // A barra começa onde a alavanca anterior terminou (753.9) e termina em
-    // 753.9 − 2.2 = 751.7; o degrau até 747.7 é a parte explicada.
-    expect(step.cumulative).toBeCloseTo(out[idx - 1].cumulative + step.value, 10);
-    expect(step.cumulative).toBeCloseTo(751.7, 10);
-    // A parte já explicada fica anotada no passo, para marcação no gráfico.
-    expect(step.explainedMusd).toBeCloseTo(-4, 10);
-  });
-
-  it('tudo explicado (resíduo ~zero): coluna some', () => {
-    const gone = applyExplanations(openSteps, discrepancy);
-    expect(gone.find((s) => s.key === 'unexplained')).toBeUndefined();
-    expect(gone).toHaveLength(openSteps.length - 1);
-    expect(applyExplanations(openSteps, discrepancy - UNEXPLAINED_EPS / 2).find((s) => s.key === 'unexplained')).toBeUndefined();
-    expect(applyExplanations(openSteps, discrepancy + UNEXPLAINED_EPS / 2).find((s) => s.key === 'unexplained')).toBeUndefined();
-  });
-
-  it('explicado além da diferença: resíduo restante com sinal oposto', () => {
-    const out = applyExplanations(openSteps, discrepancy - 5);
-    expect(out.find((s) => s.key === 'unexplained')!.value).toBeCloseTo(5, 10);
-  });
-
-  it('modo simulação: cada série desconta as mesmas explicações a partir da sua própria cadeia', () => {
+  it('explicação parcial: explicado soma em Outros, resíduo em Não Explicado, cadeia fecha', () => {
     const explained = -4;
-    const original = applyExplanations(openSteps, explained).find((s) => s.key === 'unexplained')!;
-    const simulated = applyExplanations(simOpenSteps, explained).find((s) => s.key === 'unexplained')!;
-    expect(original.value).toBeCloseTo(discrepancy - explained, 10);
-    expect(original.cumulative).toBeCloseTo(753.9 + (discrepancy - explained), 10);
-    expect(simulated.value).toBeCloseTo(discrepancy - explained, 10);
-    expect(simulated.cumulative).toBeCloseTo(766.3 + (discrepancy - explained), 10);
+    const out = applyExplanations(openSteps, explained);
+    const others = out.find((s) => s.key === 'sv_others')!;
+    const unexp = out.find((s) => s.key === 'unexplained')!;
+    // Outros = valor da fonte + explicado (6.9 − 4 = 2.9), anotando o explicado.
+    expect(others.value).toBeCloseTo(6.9 + explained, 10);
+    expect((others as { explainedMusd?: number }).explainedMusd).toBeCloseTo(explained, 10);
+    expect(others.cumulative).toBeCloseTo(749.9, 10);
+    // Não Explicado = diferença − explicado (−2.2), fechando no destino.
+    expect(unexp.value).toBeCloseTo(discrepancy - explained, 10);
+    expect(unexp.cumulative).toBeCloseTo(747.7, 10);
+    expectChainCloses(out);
   });
 
-  it('sem explicações (0): passos ficam idênticos aos do servidor (cadeia fecha no destino)', () => {
-    expect(applyExplanations(openSteps, 0)).toEqual(openSteps);
+  it('tudo explicado (resíduo ~zero): coluna some e Outros absorve toda a diferença', () => {
+    const out = applyExplanations(openSteps, discrepancy);
+    expect(out.find((s) => s.key === 'unexplained')).toBeUndefined();
+    expect(out).toHaveLength(openSteps.length - 1);
+    const others = out.find((s) => s.key === 'sv_others')!;
+    expect(others.value).toBeCloseTo(6.9 + discrepancy, 10); // 0.7
+    expect(others.cumulative).toBeCloseTo(747.7, 10);
+    expectChainCloses(out);
+    // Limiar de ~zero em ambos os lados.
+    expectChainCloses(applyExplanations(openSteps, discrepancy - UNEXPLAINED_EPS / 2));
+    expectChainCloses(applyExplanations(openSteps, discrepancy + UNEXPLAINED_EPS / 2));
+    expect(applyExplanations(openSteps, discrepancy - UNEXPLAINED_EPS / 2).find((s) => s.key === 'unexplained')).toBeUndefined();
+  });
+
+  it('explicado além da diferença: resíduo com sinal oposto e cadeia ainda fecha', () => {
+    const out = applyExplanations(openSteps, discrepancy - 5);
+    const unexp = out.find((s) => s.key === 'unexplained')!;
+    expect(unexp.value).toBeCloseTo(5, 10);
+    expectChainCloses(out);
+  });
+
+  it('modo simulação: cada série soma o mesmo explicado nos próprios passos e fecha no seu destino', () => {
+    const explained = -4;
+    const original = applyExplanations(openSteps, explained);
+    const simulated = applyExplanations(simOpenSteps, explained);
+    expectChainCloses(original);
+    expectChainCloses(simulated);
+    expect(original.find((s) => s.key === 'sv_others')!.value).toBeCloseTo(2.9, 10);
+    expect(simulated.find((s) => s.key === 'sv_others')!.value).toBeCloseTo(2.9, 10);
+    expect(original.find((s) => s.key === 'unexplained')!.cumulative).toBeCloseTo(747.7, 10);
+    expect(simulated.find((s) => s.key === 'unexplained')!.cumulative).toBeCloseTo(760.1, 10);
   });
 
   it('excluir explicações (resíduo volta a crescer) reinsere a coluna', () => {
     expect(applyExplanations(openSteps, discrepancy).find((s) => s.key === 'unexplained')).toBeUndefined();
     expect(applyExplanations(openSteps, 0).find((s) => s.key === 'unexplained')).toBeDefined();
+  });
+
+  it('série sem o passo Outros: passos ficam como vieram do servidor (fechando no destino)', () => {
+    const noOthers = openSteps.filter((s) => s.key !== 'sv_others');
+    // Série de referência sem Outros (o servidor teria mandado assim, fechada).
+    const fixed = noOthers.map((s) =>
+      s.key === 'unexplained' ? { ...s, value: 0.7, cumulative: 747.7 } : s,
+    );
+    // Sem Outros para absorver o explicado, não há como manter o fechamento:
+    // nada é ajustado (parcial, total e além da diferença).
+    expect(applyExplanations(fixed, 0.5)).toEqual(fixed);
+    expect(applyExplanations(fixed, 0.7)).toEqual(fixed);
+    expect(applyExplanations(fixed, 1.5)).toEqual(fixed);
+    expectChainCloses(applyExplanations(fixed, 0.5));
   });
 
   it('explicações ainda não carregadas (undefined): lista inalterada', () => {
