@@ -122,39 +122,50 @@ async function consultarTabela(
         "do warehouse (Databricks → SQL Warehouses → Connection details).",
     );
   }
-  const colunas = [...COLUNAS, "moeda", "atributo"];
-  // A ordem das linhas define a ordem de exibição no painel — a tabela deve
-  // ter uma coluna de ordenação estável? O contrato é 1 linha = 1 linha da aba;
-  // preservamos a ordem natural retornada pela tabela.
-  const sql = `SELECT ${colunas.join(", ")} FROM ${validarNomeTabela(tabela)}`;
-
-  let stmt = await api(cred, "/api/2.0/sql/statements", {
-    method: "POST",
-    body: JSON.stringify({
-      statement: sql,
-      warehouse_id: cred.warehouseId,
-      wait_timeout: "30s",
-      disposition: "INLINE",
-      format: "JSON_ARRAY",
-      row_limit: 1000000,
-    }),
-  });
-
-  // aguarda conclusão (warehouse pode estar acordando)
-  const inicio = Date.now();
-  while (["PENDING", "RUNNING"].includes(stmt.status?.state)) {
-    if (Date.now() - inicio > 5 * 60_000) {
-      throw new Error("Tempo esgotado aguardando o Databricks executar a consulta (5 min).");
+  // A ordem das linhas define a ordem de exibição no painel — o contrato é
+  // 1 linha da tabela = 1 linha da aba; preservamos a ordem natural retornada.
+  const executar = async (colunas: string[]) => {
+    const sql = `SELECT ${colunas.join(", ")} FROM ${validarNomeTabela(tabela)}`;
+    let stmt = await api(cred, "/api/2.0/sql/statements", {
+      method: "POST",
+      body: JSON.stringify({
+        statement: sql,
+        warehouse_id: cred.warehouseId,
+        wait_timeout: "30s",
+        disposition: "INLINE",
+        format: "JSON_ARRAY",
+        row_limit: 1000000,
+      }),
+    });
+    // aguarda conclusão (warehouse pode estar acordando)
+    const inicio = Date.now();
+    while (["PENDING", "RUNNING"].includes(stmt.status?.state)) {
+      if (Date.now() - inicio > 5 * 60_000) {
+        throw new Error("Tempo esgotado aguardando o Databricks executar a consulta (5 min).");
+      }
+      await new Promise((r) => setTimeout(r, 3000));
+      stmt = await api(cred, `/api/2.0/sql/statements/${stmt.statement_id}`);
     }
-    await new Promise((r) => setTimeout(r, 3000));
-    stmt = await api(cred, `/api/2.0/sql/statements/${stmt.statement_id}`);
-  }
-  if (stmt.status?.state !== "SUCCEEDED") {
-    const err = stmt.status?.error;
-    throw new Error(
-      `Consulta falhou no Databricks (${stmt.status?.state}): ` +
-        `${err?.message ?? "sem detalhe"}\nSQL: ${sql}`,
-    );
+    if (stmt.status?.state !== "SUCCEEDED") {
+      const err = stmt.status?.error;
+      throw new Error(
+        `Consulta falhou no Databricks (${stmt.status?.state}): ` +
+          `${err?.message ?? "sem detalhe"}\nSQL: ${sql}`,
+      );
+    }
+    return stmt;
+  };
+
+  // "grupo" é opcional na tabela: se a coluna não existir, consulta sem ela.
+  let stmt: Awaited<ReturnType<typeof executar>>;
+  try {
+    stmt = await executar([...COLUNAS, "moeda", "atributo", "grupo"]);
+  } catch (e) {
+    if (e instanceof Error && /grupo/i.test(e.message) && /UNRESOLVED_COLUMN|cannot be resolved|not found/i.test(e.message)) {
+      stmt = await executar([...COLUNAS, "moeda", "atributo"]);
+    } else {
+      throw e;
+    }
   }
 
   const cols: string[] = (stmt.manifest?.schema?.columns ?? []).map((c: any) => c.name);

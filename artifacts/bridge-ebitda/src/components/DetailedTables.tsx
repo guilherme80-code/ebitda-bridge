@@ -4,7 +4,9 @@ import {
   type GetBridgeTablesParams,
   type SimulatedBridgeTable,
 } from '@workspace/api-client-react';
+import { ChevronRight } from 'lucide-react';
 import { Table2 } from 'lucide-react';
+import { useState } from 'react';
 
 const nf = new Intl.NumberFormat('pt-BR', {
   minimumFractionDigits: 1,
@@ -30,6 +32,15 @@ export function DetailedTables({ params, enabled, simulatedTables }: Props) {
   });
 
   const simulating = !!simulatedTables && simulatedTables.length > 0;
+  // Grupos expandidos (chave `tabela:grupo`). Detalhe aparece ao clicar no grupo.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   if (!enabled) return null;
   if (!simulating && (isLoading || isError || !data)) return null;
@@ -85,21 +96,46 @@ export function DetailedTables({ params, enabled, simulatedTables }: Props) {
                   const strong = row.kind !== 'row';
                   const simRow = simulating ? (row as SimulatedBridgeTable['rows'][number]) : null;
                   const rowChanged = simRow?.changed.some(Boolean) ?? false;
+                  const group = row.group ?? null;
+                  const groupKey = group ? `${table.key}:${group}` : null;
+                  const isGroupHeader = row.kind === 'subtotal' && !!group;
+                  const isGroupDetail = row.kind === 'row' && !!group;
+                  const open = groupKey ? expanded.has(groupKey) : true;
+                  // Detalhe fica oculto até o clique no grupo; durante a
+                  // simulação, grupos com célula ajustada abrem sozinhos.
+                  if (isGroupDetail && !open && !rowChanged) return null;
                   return (
                     <tr
                       key={`${row.label}-${i}`}
-                      data-testid={rowChanged ? `row-adjusted-${table.key}-${i}` : undefined}
+                      data-testid={
+                        rowChanged
+                          ? `row-adjusted-${table.key}-${i}`
+                          : isGroupHeader
+                            ? `group-${table.key}-${i}`
+                            : undefined
+                      }
+                      onClick={isGroupHeader ? () => toggleGroup(groupKey!) : undefined}
                       className={
                         strong
                           ? row.kind === 'total'
                             ? 'bg-slate-100/80 font-bold text-slate-900 border-t-2 border-slate-200'
-                            : 'bg-slate-50/70 font-semibold text-slate-700 border-t border-slate-200'
+                            : `bg-slate-50/70 font-semibold text-slate-700 border-t border-slate-200 ${
+                                isGroupHeader ? 'cursor-pointer select-none hover:bg-slate-100' : ''
+                              }`
                           : rowChanged
                             ? 'border-t border-brand-blue/20 bg-blue-50/40 text-slate-700'
                             : 'border-t border-slate-100 text-slate-600 hover:bg-slate-50/50'
                       }
                     >
                       <td className="px-5 py-2 whitespace-nowrap sticky left-0 bg-inherit">
+                        {isGroupHeader && (
+                          <ChevronRight
+                            className={`inline w-3.5 h-3.5 mr-1.5 -mt-0.5 text-slate-400 transition-transform ${
+                              open ? 'rotate-90' : ''
+                            }`}
+                          />
+                        )}
+                        {isGroupDetail && <span className="inline-block w-5" />}
                         {row.label}
                         {rowChanged && row.kind === 'row' && (
                           <span className="ml-2 align-middle text-[9px] font-bold uppercase tracking-widest text-brand-blue bg-blue-100/80 px-1.5 py-0.5 border border-brand-blue/10">

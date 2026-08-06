@@ -379,6 +379,9 @@ components:
         kind:
           type: string
           enum: [row, subtotal, total]
+        group:
+          type: ["string", "null"]
+          description: Row group (e.g. Blacks, Controllable). Subtotal rows with a group are the group header; plain rows with a group are its detail lines.
         values:
           type: array
           items:
@@ -429,6 +432,9 @@ components:
         kind:
           type: string
           enum: [row, subtotal, total]
+        group:
+          type: ["string", "null"]
+          description: Row group (e.g. Blacks, Controllable). Subtotal rows with a group are the group header; plain rows with a group are its detail lines.
         values:
           type: array
           description: Simulated values, aligned with the columns; null means not applicable.

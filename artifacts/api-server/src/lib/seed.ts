@@ -74,6 +74,7 @@ export async function seedIfEmpty(): Promise<void> {
           scenarioId: String(r.scenario_id),
           productKey: String(r.product_key),
           label: String(r.label),
+          groupLabel: r.group_label == null ? null : String(r.group_label),
           currency: String(r.currency),
           domestic: Boolean(r.domestic),
           qtyKt: num(r.qty_kt),
@@ -88,6 +89,7 @@ export async function seedIfEmpty(): Promise<void> {
         rows.map((r) => ({
           scenarioId: String(r.scenario_id),
           category: String(r.category),
+          groupLabel: r.group_label == null ? null : String(r.group_label),
           amountKusd: num(r.amount_kusd),
           usdDenominated: Boolean(r.usd_denominated),
           sortOrder: num(r.sort_order),
@@ -99,6 +101,7 @@ export async function seedIfEmpty(): Promise<void> {
         rows.map((r) => ({
           scenarioId: String(r.scenario_id),
           item: String(r.item),
+          groupLabel: r.group_label == null ? null : String(r.group_label),
           unitPriceUsd: numOrNull(r.unit_price_usd),
           yieldFactor: numOrNull(r.yield_factor),
           amountKusd: numOrNull(r.amount_kusd),
@@ -112,6 +115,7 @@ export async function seedIfEmpty(): Promise<void> {
           scenarioId: String(r.scenario_id),
           driver: String(r.driver),
           label: String(r.label),
+          groupLabel: r.group_label == null ? null : String(r.group_label),
           amountKusd: num(r.amount_kusd),
           sortOrder: num(r.sort_order),
         })),

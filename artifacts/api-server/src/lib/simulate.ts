@@ -220,6 +220,7 @@ export function simulateBridge(
 export interface SimulatedTableRow {
   label: string;
   kind: "row" | "subtotal" | "total";
+  group?: string | null;
   values: (number | null)[];
   baseValues: (number | null)[];
   changed: boolean[];
@@ -273,6 +274,7 @@ export function buildSimulatedTables(
         return {
           label: row.label,
           kind: row.kind,
+          group: row.group ?? null,
           values: row.values,
           baseValues,
           changed,

@@ -13,5 +13,10 @@ import type { BridgeTableRowKind } from './bridgeTableRowKind';
 export interface BridgeTableRow {
   label: string;
   kind: BridgeTableRowKind;
+  /**
+     * Row group (e.g. Blacks, Controllable). Subtotal rows with a group are the group header; plain rows with a group are its detail lines.
+     * @nullable
+     */
+  group?: string | null;
   values: (number | null)[];
 }

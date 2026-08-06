@@ -17,6 +17,7 @@ linha da aba).
 | `valor`     | sim | Valor numérico |
 | `moeda`     | não | `BRL` ou `USD` (Vendas e CustoFixo) |
 | `atributo`  | não | Flag da linha (ver por seção) |
+| `grupo`     | não | Grupo de exibição do item nas tabelas detalhadas (ex.: `Blacks`, `Reds`, `Controllable`, `Operational performance`). Não se aplica a Parametros; deve ser igual em todas as linhas do mesmo item |
 
 ## Indicadores por seção
 

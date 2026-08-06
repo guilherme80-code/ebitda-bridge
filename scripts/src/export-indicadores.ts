@@ -36,6 +36,7 @@ type Linha = {
   valor: number;
   moeda?: string;
   atributo?: string;
+  grupo?: string;
 };
 
 const DRIVER_TO_ATRIBUTO: Record<string, string> = {
@@ -86,6 +87,7 @@ async function main() {
         item: s.label,
         moeda: s.currency,
         atributo: s.domestic ? "interno" : "externo",
+        ...(s.groupLabel ? { grupo: s.groupLabel } : {}),
       };
       linhas.push({ ...meta, indicador: "quantidade_kt", valor: s.qtyKt });
       linhas.push({ ...meta, indicador: "montante_kusd", valor: s.amountKusd });
@@ -99,32 +101,21 @@ async function main() {
         indicador: "montante_kusd",
         valor: f.amountKusd,
         moeda: f.usdDenominated ? "USD" : "BRL",
+        ...(f.groupLabel ? { grupo: f.groupLabel } : {}),
       });
     }
     for (const i of inputs.get(sc.id) ?? []) {
+      const meta = {
+        ...base,
+        secao: "Insumos",
+        item: i.item,
+        ...(i.groupLabel ? { grupo: i.groupLabel } : {}),
+      };
       if (i.unitPriceUsd != null) {
-        linhas.push({
-          ...base,
-          secao: "Insumos",
-          item: i.item,
-          indicador: "preco_usd_t",
-          valor: i.unitPriceUsd,
-        });
-        linhas.push({
-          ...base,
-          secao: "Insumos",
-          item: i.item,
-          indicador: "fator_rendimento",
-          valor: i.yieldFactor ?? 0,
-        });
+        linhas.push({ ...meta, indicador: "preco_usd_t", valor: i.unitPriceUsd });
+        linhas.push({ ...meta, indicador: "fator_rendimento", valor: i.yieldFactor ?? 0 });
       } else {
-        linhas.push({
-          ...base,
-          secao: "Insumos",
-          item: i.item,
-          indicador: "montante_kusd",
-          valor: i.amountKusd ?? 0,
-        });
+        linhas.push({ ...meta, indicador: "montante_kusd", valor: i.amountKusd ?? 0 });
       }
     }
     for (const m of misc.get(sc.id) ?? []) {
@@ -135,12 +126,13 @@ async function main() {
         indicador: "montante_kusd",
         valor: m.amountKusd,
         atributo: DRIVER_TO_ATRIBUTO[m.driver] ?? m.driver,
+        ...(m.groupLabel ? { grupo: m.groupLabel } : {}),
       });
     }
   }
 
   const ws = XLSX.utils.json_to_sheet(linhas, {
-    header: ["versao", "periodo", "secao", "item", "indicador", "valor", "moeda", "atributo"],
+    header: ["versao", "periodo", "secao", "item", "indicador", "valor", "moeda", "atributo", "grupo"],
   });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Indicadores");

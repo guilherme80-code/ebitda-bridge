@@ -55,6 +55,7 @@ export const salesFactsTable = pgTable("sales_facts", {
   label: text("label").notNull(),
   currency: text("currency").notNull(), // BRL | USD
   domestic: boolean("domestic").notNull().default(false),
+  groupLabel: text("group_label"),
   qtyKt: doublePrecision("qty_kt").notNull(),
   amountKusd: doublePrecision("amount_kusd").notNull(),
   varCostKusd: doublePrecision("var_cost_kusd").notNull(),
@@ -67,6 +68,7 @@ export const fixedCostFactsTable = pgTable("fixed_cost_facts", {
   id: serial("id").primaryKey(),
   scenarioId: text("scenario_id").notNull(),
   category: text("category").notNull(),
+  groupLabel: text("group_label"),
   amountKusd: doublePrecision("amount_kusd").notNull(),
   usdDenominated: boolean("usd_denominated").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -81,6 +83,7 @@ export const inputPriceFactsTable = pgTable("input_price_facts", {
   id: serial("id").primaryKey(),
   scenarioId: text("scenario_id").notNull(),
   item: text("item").notNull(),
+  groupLabel: text("group_label"),
   unitPriceUsd: doublePrecision("unit_price_usd"),
   yieldFactor: doublePrecision("yield_factor"),
   amountKusd: doublePrecision("amount_kusd"),
@@ -95,6 +98,7 @@ export const miscFactsTable = pgTable("misc_facts", {
   scenarioId: text("scenario_id").notNull(),
   driver: text("driver").notNull(),
   label: text("label").notNull(),
+  groupLabel: text("group_label"),
   amountKusd: doublePrecision("amount_kusd").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
 });

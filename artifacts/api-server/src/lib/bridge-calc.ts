@@ -55,6 +55,9 @@ export interface BridgeTableRow {
   label: string;
   kind: "row" | "subtotal" | "total";
   values: (number | null)[]; // alinhado às colunas
+  /** Grupo da linha (ex.: Blacks, Controllable). Linhas de subtotal com grupo
+   *  são o cabeçalho do grupo; linhas comuns com grupo são o detalhe. */
+  group?: string | null;
 }
 
 export interface BridgeTable {
@@ -115,6 +118,7 @@ export function computeBridge(
   const salesRows: {
     label: string;
     domestic: boolean;
+    group: string | null;
     sortOrder: number;
     qtyB: number;
     qtyT: number;
@@ -171,6 +175,7 @@ export function computeBridge(
     salesRows.push({
       label,
       domestic: (t ?? b)?.domestic ?? false,
+      group: (t ?? b)?.groupLabel ?? null,
       sortOrder,
       qtyB,
       qtyT,
@@ -217,6 +222,7 @@ export function computeBridge(
   const fixedDetail: DetailLine[] = [];
   const fixedRows: {
     label: string;
+    group: string | null;
     sortOrder: number;
     amtB: number;
     amtT: number;
@@ -227,12 +233,13 @@ export function computeBridge(
     const amtB = b?.amountKusd ?? 0;
     const amtT = t?.amountKusd ?? 0;
     const usd = (t ?? b)?.usdDenominated ?? false;
+    const group = (t ?? b)?.groupLabel ?? null;
     const fcForex = usd || fcFxB === 0 ? 0 : amtT * (fcFxT / fcFxB - 1); // col. I
     const eff = amtB - amtT - fcForex; // col. J
     fixedCost += eff;
-    fixedRows.push({ label: category, sortOrder, amtB, amtT, fcForex, eff });
+    fixedRows.push({ label: category, group, sortOrder, amtB, amtT, fcForex, eff });
     if (Math.abs(eff) > 1e-9) {
-      fixedDetail.push({ label: category, group: null, value: eff / K, sortOrder });
+      fixedDetail.push({ label: category, group, value: eff / K, sortOrder });
     }
   }
 
@@ -251,6 +258,7 @@ export function computeBridge(
   const inputDetail: DetailLine[] = [];
   const inputRows: {
     label: string;
+    group: string | null;
     sortOrder: number;
     pB: number | null;
     pT: number | null;
@@ -262,28 +270,30 @@ export function computeBridge(
   for (const [item, { b, t, sortOrder }] of inputByItem) {
     let eff = 0;
     let row: (typeof inputRows)[number];
+    const group = (t ?? b)?.groupLabel ?? null;
     if (b?.unitPriceUsd != null || t?.unitPriceUsd != null) {
       const pB = b?.unitPriceUsd ?? 0;
       const pT = t?.unitPriceUsd ?? 0;
       const yieldF = t?.yieldFactor ?? b?.yieldFactor ?? 0;
       eff = (pB - pT) * yieldF * prodT; // col. J (128-134)
-      row = { label: item, sortOrder, pB, pT, amtB: null, amtT: null, eff };
+      row = { label: item, group, sortOrder, pB, pT, amtB: null, amtT: null, eff };
     } else {
       const amtB = b?.amountKusd ?? 0;
       const amtT = t?.amountKusd ?? 0;
       eff = amtT - amtB; // itens diretos
-      row = { label: item, sortOrder, pB: null, pT: null, amtB, amtT, eff };
+      row = { label: item, group, sortOrder, pB: null, pT: null, amtB, amtT, eff };
     }
     inputPrice += eff;
     inputRows.push(row);
     if (Math.abs(eff) > 1e-9) {
-      inputDetail.push({ label: item, group: null, value: eff / K, sortOrder });
+      inputDetail.push({ label: item, group, value: eff / K, sortOrder });
     }
   }
 
   // ---------- consumo / others / estoque (147, 155-181) ----------
   interface MiscRow {
     label: string;
+    group: string | null;
     sortOrder: number;
     amtB: number;
     amtT: number;
@@ -312,11 +322,12 @@ export function computeBridge(
     for (const [label, { b, t, sortOrder }] of byLabel) {
       const amtB = b?.amountKusd ?? 0;
       const amtT = t?.amountKusd ?? 0;
+      const group = (t ?? b)?.groupLabel ?? null;
       const eff = amtT - amtB;
       total += eff;
-      rows.push({ label, sortOrder, amtB, amtT, eff });
+      rows.push({ label, group, sortOrder, amtB, amtT, eff });
       if (Math.abs(eff) > 1e-9) {
-        lines.push({ label, group: null, value: eff / K, sortOrder });
+        lines.push({ label, group, value: eff / K, sortOrder });
       }
     }
     lines.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -361,6 +372,37 @@ export function computeBridge(
   // ---------- tabelas detalhadas (abas Receita, Fixed Cost, ...) ----------
   const tables: BridgeTable[] = [];
 
+  /** Agrupa linhas pelo campo `group` (ordem de primeira aparição; sem grupo
+   *  ao final) e emite, para cada grupo, um cabeçalho (kind "subtotal") com a
+   *  soma das colunas seguido das linhas de detalhe. */
+  function groupedRows<T extends { group: string | null }>(
+    rows: T[],
+    toValues: (r: T) => (number | null)[],
+    sumValues: (rs: T[]) => (number | null)[],
+  ): BridgeTableRow[] {
+    const order: (string | null)[] = [];
+    for (const r of rows) {
+      if (r.group !== null && !order.includes(r.group)) order.push(r.group);
+    }
+    if (rows.some((r) => r.group === null)) order.push(null);
+    const out: BridgeTableRow[] = [];
+    for (const g of order) {
+      const members = rows.filter((r) => r.group === g);
+      if (g !== null) {
+        out.push({ label: g, kind: "subtotal", group: g, values: sumValues(members) });
+      }
+      out.push(
+        ...members.map((r) => ({
+          label: (r as unknown as { label: string }).label,
+          kind: "row" as const,
+          group: g,
+          values: toValues(r),
+        })),
+      );
+    }
+    return out;
+  }
+
   // Vendas (aba Receita): por produto, com subtotais Externo/Doméstico.
   salesRows.sort((a, b) => a.sortOrder - b.sortOrder);
   const salesValues = (r: (typeof salesRows)[number]): (number | null)[] => [
@@ -387,8 +429,13 @@ export function computeBridge(
       rows.reduce((s, r) => s + r.fx, 0) / K,
     ],
   });
-  const external = salesRows.filter((r) => !r.domestic);
-  const domesticRows = salesRows.filter((r) => r.domestic);
+  // Blocos de vendas: grupo próprio (coluna grupo) ou Externo/Mercado Interno.
+  const salesGrouped = salesRows.map((r) => ({
+    ...r,
+    group: r.group ?? (r.domestic ? "Mercado Interno" : "Externo"),
+  }));
+  const sumSalesValues = (rows: typeof salesRows): (number | null)[] =>
+    sumSales(rows, "", "subtotal").values;
   tables.push({
     key: "sales",
     title: "Vendas — volume, preço e efeitos por produto",
@@ -403,10 +450,7 @@ export function computeBridge(
       { key: "forex", label: "Câmbio (MUSD)" },
     ],
     rows: [
-      ...external.map((r) => ({ label: r.label, kind: "row" as const, values: salesValues(r) })),
-      sumSales(external, "Subtotal Externo", "subtotal"),
-      ...domesticRows.map((r) => ({ label: r.label, kind: "row" as const, values: salesValues(r) })),
-      sumSales(domesticRows, "Subtotal Mercado Interno", "subtotal"),
+      ...groupedRows(salesGrouped, salesValues, sumSalesValues),
       sumSales(salesRows, "Total", "total"),
     ],
   });
@@ -423,11 +467,16 @@ export function computeBridge(
       { key: "effect", label: "Efeito custo fixo (MUSD)" },
     ],
     rows: [
-      ...fixedRows.map((r) => ({
-        label: r.label,
-        kind: "row" as const,
-        values: [r.amtB / K, r.amtT / K, r.fcForex / K, r.eff / K],
-      })),
+      ...groupedRows(
+        fixedRows,
+        (r) => [r.amtB / K, r.amtT / K, r.fcForex / K, r.eff / K],
+        (rs) => [
+          rs.reduce((s, r) => s + r.amtB, 0) / K,
+          rs.reduce((s, r) => s + r.amtT, 0) / K,
+          rs.reduce((s, r) => s + r.fcForex, 0) / K,
+          rs.reduce((s, r) => s + r.eff, 0) / K,
+        ],
+      ),
       {
         label: "Total",
         kind: "total" as const,
@@ -454,17 +503,17 @@ export function computeBridge(
       { key: "effect", label: "Efeito (MUSD)" },
     ],
     rows: [
-      ...inputRows.map((r) => ({
-        label: r.label,
-        kind: "row" as const,
-        values: [
+      ...groupedRows(
+        inputRows,
+        (r) => [
           r.pB,
           r.pT,
           r.amtB == null ? null : r.amtB / K,
           r.amtT == null ? null : r.amtT / K,
           r.eff / K,
         ],
-      })),
+        (rs) => [null, null, null, null, rs.reduce((s, r) => s + r.eff, 0) / K],
+      ),
       {
         label: "Total",
         kind: "total" as const,
@@ -483,11 +532,15 @@ export function computeBridge(
       { key: "effect", label: "Efeito (MUSD)" },
     ],
     rows: [
-      ...usage.rows.map((r) => ({
-        label: r.label,
-        kind: "row" as const,
-        values: [r.amtB / K, r.amtT / K, r.eff / K],
-      })),
+      ...groupedRows(
+        usage.rows,
+        (r) => [r.amtB / K, r.amtT / K, r.eff / K],
+        (rs) => [
+          rs.reduce((s, r) => s + r.amtB, 0) / K,
+          rs.reduce((s, r) => s + r.amtT, 0) / K,
+          rs.reduce((s, r) => s + r.eff, 0) / K,
+        ],
+      ),
       {
         label: "Total",
         kind: "total" as const,
@@ -520,17 +573,20 @@ export function computeBridge(
   });
 
   // Estoque / Outros (aba SV-Others)
+  const svGrouped = [
+    ...others.rows.map((r) => ({ ...r, group: r.group ?? "Outros" })),
+    ...stock.rows.map((r) => ({ ...r, group: r.group ?? "Variação de estoque" })),
+  ];
   const svRows: BridgeTableRow[] = [
-    ...others.rows.map((r) => ({
-      label: `${r.label} (Outros)`,
-      kind: "row" as const,
-      values: [r.amtB / K, r.amtT / K, r.eff / K],
-    })),
-    ...stock.rows.map((r) => ({
-      label: r.label,
-      kind: "row" as const,
-      values: [r.amtB / K, r.amtT / K, r.eff / K],
-    })),
+    ...groupedRows(
+      svGrouped,
+      (r) => [r.amtB / K, r.amtT / K, r.eff / K],
+      (rs) => [
+        rs.reduce((s, r) => s + r.amtB, 0) / K,
+        rs.reduce((s, r) => s + r.amtT, 0) / K,
+        rs.reduce((s, r) => s + r.eff, 0) / K,
+      ],
+    ),
     {
       label: "Variação de estoque — ajuste de fechamento",
       kind: "row" as const,

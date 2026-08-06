@@ -110,6 +110,7 @@ export const GetBridgeTablesResponse = zod.object({
   "rows": zod.array(zod.object({
   "label": zod.string(),
   "kind": zod.enum(['row', 'subtotal', 'total']),
+  "group": zod.string().nullish().describe('Row group (e.g. Blacks, Controllable). Subtotal rows with a group are the group header; plain rows with a group are its detail lines.'),
   "values": zod.array(zod.number().nullable())
 }).describe('One row of a detailed table. Values align with the columns array; null means not applicable.'))
 }).describe('A detailed table for one bridge driver (mirrors an Excel driver tab).'))
@@ -153,6 +154,7 @@ export const SimulateBridgeResponse = zod.object({
   "rows": zod.array(zod.object({
   "label": zod.string(),
   "kind": zod.enum(['row', 'subtotal', 'total']),
+  "group": zod.string().nullish().describe('Row group (e.g. Blacks, Controllable). Subtotal rows with a group are the group header; plain rows with a group are its detail lines.'),
   "values": zod.array(zod.number().nullable()).describe('Simulated values, aligned with the columns; null means not applicable.'),
   "baseValues": zod.array(zod.number().nullable()).describe('Original (pre-simulation) values, aligned with the columns.'),
   "changed": zod.array(zod.boolean()).describe('Whether each cell was affected by the simulation (aligned with the columns).')

@@ -157,6 +157,11 @@ export const BridgeTableRowKind = {
 export interface BridgeTableRow {
   label: string;
   kind: BridgeTableRowKind;
+  /**
+     * Row group (e.g. Blacks, Controllable). Subtotal rows with a group are the group header; plain rows with a group are its detail lines.
+     * @nullable
+     */
+  group?: string | null;
   values: (number | null)[];
 }
 
@@ -196,6 +201,11 @@ export const SimulatedBridgeTableRowKind = {
 export interface SimulatedBridgeTableRow {
   label: string;
   kind: SimulatedBridgeTableRowKind;
+  /**
+     * Row group (e.g. Blacks, Controllable). Subtotal rows with a group are the group header; plain rows with a group are its detail lines.
+     * @nullable
+     */
+  group?: string | null;
   /** Simulated values, aligned with the columns; null means not applicable. */
   values: (number | null)[];
   /** Original (pre-simulation) values, aligned with the columns. */

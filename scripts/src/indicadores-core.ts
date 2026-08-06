@@ -68,6 +68,7 @@ export type Registro = {
   valor: number;
   moeda: string | null;
   atributo: string | null;
+  grupo: string | null;
 };
 
 /** Como apontar a posição do problema na mensagem de erro:
@@ -175,6 +176,11 @@ export function validarLinha(
     }
   }
   if (secao === "CustoFixo" && !moeda) erro(linha, `CustoFixo exige moeda BRL ou USD`);
+  const grupo =
+    typeof r.grupo === "string" && r.grupo.trim() !== "" ? r.grupo.trim() : null;
+  if (grupo && secao === "Parametros") {
+    erro(linha, `grupo não se aplica à seção Parametros (recebido: "${grupo}")`);
+  }
   return {
     linha,
     versao: texto("versao"),
@@ -185,6 +191,7 @@ export function validarLinha(
     valor: valor as number,
     moeda,
     atributo,
+    grupo,
   };
 }
 
@@ -269,11 +276,12 @@ export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
         if (v.vals.has(r.indicador)) {
           erro(r.linha, `indicador ${r.indicador} duplicado para o produto "${r.item}"`);
         }
-        if (r.moeda !== v.reg.moeda || r.atributo !== v.reg.atributo) {
+        if (r.moeda !== v.reg.moeda || r.atributo !== v.reg.atributo || r.grupo !== v.reg.grupo) {
           erro(
             r.linha,
-            `produto "${r.item}" com moeda/atributo inconsistentes entre as linhas ` +
-              `(${rotulo(v.reg.linha)}: ${v.reg.moeda}/${v.reg.atributo}; esta: ${r.moeda}/${r.atributo})`,
+            `produto "${r.item}" com moeda/atributo/grupo inconsistentes entre as linhas ` +
+              `(${rotulo(v.reg.linha)}: ${v.reg.moeda}/${v.reg.atributo}/${v.reg.grupo ?? ""}; ` +
+              `esta: ${r.moeda}/${r.atributo}/${r.grupo ?? ""})`,
           );
         }
         v.vals.set(r.indicador, r.valor);
@@ -285,6 +293,13 @@ export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
         const v = insumos.get(r.item) ?? { reg: r, vals: new Map(), ordem: insumos.size };
         if (v.vals.has(r.indicador)) {
           erro(r.linha, `indicador ${r.indicador} duplicado para o insumo "${r.item}"`);
+        }
+        if (r.grupo !== v.reg.grupo) {
+          erro(
+            r.linha,
+            `insumo "${r.item}" com grupo inconsistente entre as linhas ` +
+              `(${rotulo(v.reg.linha)}: "${v.reg.grupo ?? ""}"; esta: "${r.grupo ?? ""}")`,
+          );
         }
         v.vals.set(r.indicador, r.valor);
         insumos.set(r.item, v);
@@ -312,6 +327,7 @@ export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
         scenarioId: g.meta.id,
         productKey: slug(item),
         label: item,
+        groupLabel: v.reg.grupo,
         currency: v.reg.moeda!,
         domestic: v.reg.atributo === "interno",
         qtyKt: v.vals.get("quantidade_kt")!,
@@ -324,6 +340,7 @@ export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
       fixed.push({
         scenarioId: g.meta.id,
         category: item,
+        groupLabel: f.reg.grupo,
         amountKusd: f.reg.valor,
         usdDenominated: f.reg.moeda === "USD",
         sortOrder: f.ordem,
@@ -346,6 +363,7 @@ export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
       inputs.push({
         scenarioId: g.meta.id,
         item,
+        groupLabel: v.reg.grupo,
         unitPriceUsd: precificado ? v.vals.get("preco_usd_t")! : null,
         yieldFactor: precificado ? v.vals.get("fator_rendimento")! : null,
         amountKusd: precificado ? null : v.vals.get("montante_kusd")!,
@@ -357,6 +375,7 @@ export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
         scenarioId: g.meta.id,
         driver: ATRIBUTO_TO_DRIVER[a.reg.atributo!],
         label: a.reg.item,
+        groupLabel: a.reg.grupo,
         amountKusd: a.reg.valor,
         sortOrder: a.ordem,
       });
