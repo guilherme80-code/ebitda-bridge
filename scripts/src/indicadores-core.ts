@@ -46,6 +46,47 @@ const VERSIONS = [
 ];
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
+/**
+ * Interpreta um período mensal nos dois formatos aceitos:
+ *   - `YYYYMM` (padrão SAP SAC, canônico): "202601" = jan/2026;
+ *   - `MMMYY` (formato antigo, retrocompatível): "JAN26".
+ * Retorna { mi (0-11), yy ("26") } ou null quando não é nenhum dos dois.
+ * Lança via `erro` quando o formato é YYYYMM mas mês/ano são inválidos.
+ */
+export function parsePeriodoMensal(
+  periodo: string,
+  linha: number,
+  erro: (posicao: number, msg: string) => never,
+): { mi: number; yy: string } | null {
+  const p = periodo.trim().toUpperCase();
+  const ym = p.match(/^(\d{4})(\d{2})$/);
+  if (ym) {
+    const ano = Number(ym[1]);
+    const mes = Number(ym[2]);
+    if (mes < 1 || mes > 12) {
+      erro(linha, `periodo "${periodo}": mês inválido no formato YYYYMM (esperado 01..12)`);
+    }
+    if (ano < 2000 || ano > 2099) {
+      erro(linha, `periodo "${periodo}": ano fora do esperado no formato YYYYMM (esperado 2000..2099)`);
+    }
+    return { mi: mes - 1, yy: ym[1].slice(2) };
+  }
+  const mi = MONTHS.indexOf(p.slice(0, 3));
+  if (mi >= 0 && /^\d{2}$/.test(p.slice(3))) return { mi, yy: p.slice(3) };
+  return null;
+}
+
+/** Converte o período interno mensal ("JAN26") para o padrão SAC "YYYYMM". */
+export function periodoParaYYYYMM(period: string): string {
+  const p = period.trim().toUpperCase();
+  if (/^\d{6}$/.test(p)) return p; // já está no padrão
+  const mi = MONTHS.indexOf(p.slice(0, 3));
+  if (mi < 0 || !/^\d{2}$/.test(p.slice(3))) {
+    throw new Error(`Período mensal inesperado: "${period}" (esperado JAN26..DEC26)`);
+  }
+  return `20${p.slice(3)}${String(mi + 1).padStart(2, "0")}`;
+}
+
 const INDICADORES: Record<string, Set<string>> = {
   Parametros: new Set([
     "cambio_brl_usd",
@@ -259,21 +300,22 @@ function scenarioMeta(
   if (/^FY\d{2}$/.test(periodo) || /^Q[1-4]\d{2}$/.test(periodo)) {
     erro(
       linha,
-      `periodo "${periodo}" não é mais aceito: a fonte é mensal (JAN26..DEC26). ` +
+      `periodo "${periodo}" não é mais aceito: a fonte é mensal (YYYYMM, ex.: 202601). ` +
         `FY e trimestres são consolidados pelo painel a partir dos meses`,
     );
   }
-  const mi = MONTHS.indexOf(periodo.slice(0, 3));
-  if (mi >= 0 && /^\d{2}$/.test(periodo.slice(3))) {
+  const pm = parsePeriodoMensal(periodo, linha, erro);
+  if (pm) {
+    const rotuloMes = `${MONTHS[pm.mi]}${pm.yy}`;
     return {
-      id: `fy${periodo.slice(3)}_m${String(mi + 1).padStart(2, "0")}_${vSlug}`,
+      id: `fy${pm.yy}_m${String(pm.mi + 1).padStart(2, "0")}_${vSlug}`,
       periodKind: "month",
-      label: `${periodo} ${vLabel}`,
+      label: `${rotuloMes} ${vLabel}`,
       versao: canonica,
-      sortOrder: 10000 + (vi + 1) * 100 + mi,
+      sortOrder: 10000 + (vi + 1) * 100 + pm.mi,
     };
   }
-  erro(linha, `periodo desconhecido: "${periodo}" (esperado JAN26..DEC26)`);
+  erro(linha, `periodo desconhecido: "${periodo}" (esperado YYYYMM, ex.: 202601; JAN26..DEC26 também é aceito)`);
 }
 
 /**
@@ -332,10 +374,19 @@ export function validarLinha(
   if (grupo && secao === "Parametros") {
     erro(linha, `grupo não se aplica à seção Parametros (recebido: "${grupo}")`);
   }
+  // Período: aceita YYYYMM (padrão SAC; células numéricas do Excel inclusas)
+  // e MMMYY (formato antigo). Normaliza para o formato interno MMMYY — assim
+  // scenarios.period e os rótulos do painel não mudam.
+  const periodoBruto =
+    typeof r.periodo === "number" && Number.isFinite(r.periodo)
+      ? String(r.periodo)
+      : texto("periodo");
+  const pm = parsePeriodoMensal(periodoBruto, linha, erro);
+  const periodo = pm ? `${MONTHS[pm.mi]}${pm.yy}` : periodoBruto;
   return {
     linha,
     versao: texto("versao"),
-    periodo: texto("periodo"),
+    periodo,
     secao,
     item: texto("item"),
     indicador,

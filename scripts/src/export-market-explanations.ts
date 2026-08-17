@@ -24,6 +24,7 @@ import {
   marketIndicatorValuesTable,
   marketIndicatorItemsTable,
 } from "@workspace/db";
+import { periodoParaYYYYMM } from "./indicadores-core.js";
 
 const DEFAULT_OUT = path.resolve(
   import.meta.dirname,
@@ -116,7 +117,9 @@ async function main() {
         }
         linhasExp.push({
           versao: sc.version,
-          periodo: sc.period,
+          // Padrão SAP SAC: YYYYMM (ex.: 202601); a importação aceita também
+          // o formato antigo (JAN26).
+          periodo: periodoParaYYYYMM(sc.period),
           explicacao: ind.title,
           linha: line.label,
           valor: v.value,

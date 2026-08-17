@@ -92,6 +92,10 @@ Catálogo de cenários. Um cenário = uma versão dentro de um período.
 | `label` | text | Rótulo de exibição |
 | `sort_order` | integer | Ordem de exibição no seletor |
 
+`period` é o formato **interno** de exibição (`JAN26` etc.) e não muda: o
+contrato externo (Excel/Databricks/SAC) usa o padrão SAP SAC `YYYYMM`
+(ex.: `202601`), convertido na importação/exportação.
+
 Os **fatos são gravados somente em cenários mensais**. Os cenários de
 trimestre e ano existem no catálogo, mas seus valores são derivados na
 leitura: montantes e quantidades somando os meses; taxas (câmbio, preços de

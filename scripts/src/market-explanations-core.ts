@@ -28,6 +28,7 @@ import {
   marketIndicatorValuesTable,
   marketIndicatorItemsTable,
 } from "@workspace/db";
+import { parsePeriodoMensal } from "./indicadores-core.js";
 
 export const COLUNAS_EXPLICACOES = [
   "versao",
@@ -87,12 +88,13 @@ export function scenarioIdDe(
   if (fy) return `fy${fy[1]}_fy_${vSlug}`;
   const q = p.match(/^Q([1-4])(\d{2})$/);
   if (q) return `fy${q[2]}_q${q[1]}_${vSlug}`;
-  const mi = MONTHS.indexOf(p.slice(0, 3));
-  if (mi >= 0 && /^\d{2}$/.test(p.slice(3))) {
-    return `fy${p.slice(3)}_m${String(mi + 1).padStart(2, "0")}_${vSlug}`;
+  const pm = parsePeriodoMensal(p, linha, fazErro(rotulo));
+  if (pm) {
+    return `fy${pm.yy}_m${String(pm.mi + 1).padStart(2, "0")}_${vSlug}`;
   }
   throw new Error(
-    `${rotulo(linha)}: periodo desconhecido: "${periodo}" (esperado FY26, Q126..Q426 ou JAN26..DEC26)`,
+    `${rotulo(linha)}: periodo desconhecido: "${periodo}" (esperado YYYYMM, ex.: 202601; ` +
+      `FY26, Q126..Q426 e JAN26..DEC26 também são aceitos)`,
   );
 }
 
@@ -338,7 +340,10 @@ export function validarLinhaValor(
   const scenarioId = exigirMensal(
     scenarioIdDe(
       texto(r, "versao", linha, erro),
-      texto(r, "periodo", linha, erro),
+      // Células YYYYMM podem chegar numéricas do Excel.
+      typeof r.periodo === "number" && Number.isFinite(r.periodo)
+        ? String(r.periodo)
+        : texto(r, "periodo", linha, erro),
       linha,
       rotulo,
     ),

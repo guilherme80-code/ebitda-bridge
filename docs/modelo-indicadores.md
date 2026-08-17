@@ -32,7 +32,7 @@ conjunto de itens); item da fato fora da dimensão interrompe a importação.
 | Coluna      | Obrigatória | Descrição |
 |-------------|-------------|-----------|
 | `versao`    | sim | Versão do cenário: `ACTUAL`, `BUDGET`, `MRF1` … `MRF7` (`MRF01`…`MRF09` também são aceitos e normalizados) |
-| `periodo`   | sim | Período: sempre mensal, `JAN26`…`DEC26`. A fonte NÃO traz FY nem trimestres — o painel consolida FY e trimestres somando os meses da versão (câmbio, preços de insumos e participação de custo doméstico entram como médias ponderadas). FY/trimestre só aparecem no painel quando todos os meses do período têm dados |
+| `periodo`   | sim | Período: sempre mensal, no padrão SAP SAC **`YYYYMM`** (ex.: `202601` = jan/2026; mês 01..12, ano 2000..2099). O formato antigo `JAN26`…`DEC26` continua aceito na importação e é normalizado para o mesmo cenário mensal. A fonte NÃO traz FY nem trimestres — o painel consolida FY e trimestres somando os meses da versão (câmbio, preços de insumos e participação de custo doméstico entram como médias ponderadas). FY/trimestre só aparecem no painel quando todos os meses do período têm dados |
 | `item`      | sim | Chave do item — deve constar na dimensão "Itens" |
 | `indicador` | sim | Nome do indicador (lista abaixo, por seção) |
 | `valor`     | sim | Valor numérico |

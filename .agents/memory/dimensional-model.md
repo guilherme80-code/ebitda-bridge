@@ -9,3 +9,8 @@ description: Durable rules for the dim+fact restructure — why it exists and th
 - Display order comes from the DIMENSION's row order, never from first appearance in the fact — sparse scenarios would silently reorder items otherwise.
 - Startup must fail loudly (exit) if the dimensional data cannot be ensured; serving without it breaks every read. Runtime DDL for the new tables must stay additive and idempotent because publishing copies the schema only at publish time.
 - Explanation lines are keyed by the COMPOSITE pair explicação + linha (never a globally unique label — the same label legitimately exists under different explicações, and forcing global uniqueness broke export of valid data).
+
+## Período externo YYYYMM (padrão SAC)
+- Contrato externo (Excel/Databricks/SAC) usa `periodo` em `YYYYMM` (ex.: 202601); formato antigo `JAN26..DEC26` segue aceito na importação e é normalizado.
+- **Why:** SAC exige YYYYMM na dimensão de tempo; interno (`scenarios.period`, ids `fy26_m01_*`, rótulos do painel) permanece MMMYY — conversão só na borda (parse nos cores, `periodoParaYYYYMM` no export).
+- **How to apply:** células YYYYMM podem chegar numéricas do Excel — trate número finito como string antes de validar; mês 00/13 e ano fora de 2000..2099 abortam a carga.

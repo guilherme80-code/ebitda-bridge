@@ -11,8 +11,10 @@ Referências: `docs/modelo-indicadores.md` (contrato de importação) e
 ## Convenções comuns aos dois modelos
 
 - **Granularidade: versão × mês.** Versões: `ACTUAL`, `BUDGET`, `MRF1`…`MRF7`.
-  Períodos: somente meses `JAN26`…`DEC26`. NÃO carregue FY nem trimestres — o
-  painel deriva FY/Q somando meses (taxas entram como médias ponderadas).
+  Períodos: somente meses, no padrão SAP SAC **`YYYYMM`** (ex.: `202601` =
+  jan/2026). O formato antigo `JAN26`…`DEC26` continua aceito na importação.
+  NÃO carregue FY nem trimestres — o painel deriva FY/Q somando meses (taxas
+  entram como médias ponderadas).
 - **Unidades**: montantes em kUSD, quantidades em kt, preços em USD/t
   (explicações também usam MUSD nas linhas de montante).
 - **Chave dos membros de dimensão é global**: as propriedades de um membro
@@ -32,7 +34,7 @@ Referências: `docs/modelo-indicadores.md` (contrato de importação) e
 | Elemento SAC | Conteúdo |
 |---|---|
 | Dimensão **Versão** (category/version) | `ACTUAL`, `BUDGET`, `MRF1`…`MRF7` |
-| Dimensão **Tempo** | Mensal, `JAN26`…`DEC26` |
+| Dimensão **Tempo** | Mensal, `YYYYMM` (ex.: `202601`…`202612`) |
 | Dimensão **Item** (genérica, com propriedades) | Um membro por item; ver propriedades abaixo |
 | Dimensão de **conta** (medida) **Indicador** | Contas listadas abaixo, por seção |
 | Medida | `valor` (numérica) |
@@ -111,7 +113,7 @@ com valores por versão × mês, e uma lista de **itens do bridge** vinculados.
 | Elemento SAC | Conteúdo |
 |---|---|
 | Dimensão **Versão** | `ACTUAL`, `BUDGET`, `MRF1`…`MRF7` |
-| Dimensão **Tempo** | Mensal, `JAN26`…`DEC26` |
+| Dimensão **Tempo** | Mensal, `YYYYMM` (ex.: `202601`…`202612`) |
 | Dimensão **Linha** (genérica, com propriedades) | Um membro por par explicação + linha. Como IDs de membro no SAC são globais na dimensão, o **ID técnico do membro é a chave composta serializada** `<explicacao>|<linha>` (ex.: `Iron Ores|Freight`); o rótulo exibido (description) é `linha`, e `explicacao` é propriedade |
 | Medidas | `valor` e `kt` (volume, opcional — só linhas de preço) |
 

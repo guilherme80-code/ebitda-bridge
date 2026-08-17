@@ -37,6 +37,14 @@ describe("scenarioIdDe", () => {
     expect(() => scenarioIdDe("MRF9", "FY26", 5, rotulo)).toThrow(/Linha 5.*versao desconhecida/);
     expect(() => scenarioIdDe("BUDGET", "S126", 7, rotulo)).toThrow(/Linha 7.*periodo desconhecido/);
   });
+
+  it("aceita YYYYMM (padrão SAC) e rejeita mês/ano inválidos", () => {
+    expect(scenarioIdDe("MRF3", "202601", 2, rotulo)).toBe("fy26_m01_mrf3");
+    expect(scenarioIdDe("ACTUAL", "202612", 2, rotulo)).toBe("fy26_m12_actual");
+    expect(scenarioIdDe("BUDGET", "202601", 2, rotulo)).toBe(scenarioIdDe("BUDGET", "JAN26", 2, rotulo));
+    expect(() => scenarioIdDe("BUDGET", "202613", 4, rotulo)).toThrow(/mês inválido/);
+    expect(() => scenarioIdDe("BUDGET", "190001", 4, rotulo)).toThrow(/ano fora do esperado/);
+  });
 });
 
 describe("validarLinhaValor — formato por versão", () => {

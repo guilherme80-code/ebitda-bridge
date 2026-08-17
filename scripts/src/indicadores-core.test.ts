@@ -5,6 +5,7 @@ import {
   ordenarDimensao,
   validarLinha,
   montarDados,
+  periodoParaYYYYMM,
   type Rotulador,
 } from "./indicadores-core";
 
@@ -140,6 +141,44 @@ describe("mesclarDimensao", () => {
     expect(() =>
       ordenarDimensao([{ registro: { item: "A", sort_order: "x" }, posicao: 1 }], rotuloDim, false),
     ).toThrow(/"sort_order" não numérica/);
+  });
+
+  it("aceita periodo YYYYMM (padrão SAC) como equivalente a MMMYY", () => {
+    const a = validarLinha(
+      { versao: "BUDGET", periodo: "202601", item: "Global", indicador: "ebitda_kusd", valor: 1, secao: "Parametros" },
+      2,
+      rotuloFato,
+    );
+    const b = validarLinha(
+      { versao: "BUDGET", periodo: "JAN26", item: "Global", indicador: "ebitda_kusd", valor: 1, secao: "Parametros" },
+      3,
+      rotuloFato,
+    );
+    expect(a.periodo).toBe("JAN26");
+    expect(a.periodo).toBe(b.periodo);
+    // Célula numérica do Excel também vale
+    const c = validarLinha(
+      { versao: "BUDGET", periodo: 202612, item: "Global", indicador: "ebitda_kusd", valor: 1, secao: "Parametros" },
+      4,
+      rotuloFato,
+    );
+    expect(c.periodo).toBe("DEC26");
+  });
+
+  it("rejeita YYYYMM com mês ou ano inválido", () => {
+    const linha = (periodo: unknown) => ({
+      versao: "BUDGET", periodo, item: "Global", indicador: "ebitda_kusd", valor: 1, secao: "Parametros",
+    });
+    expect(() => validarLinha(linha("202613"), 2, rotuloFato)).toThrow(/mês inválido/);
+    expect(() => validarLinha(linha("202600"), 2, rotuloFato)).toThrow(/mês inválido/);
+    expect(() => validarLinha(linha("190001"), 2, rotuloFato)).toThrow(/ano fora do esperado/);
+  });
+
+  it("periodoParaYYYYMM converte o período interno para o padrão SAC", () => {
+    expect(periodoParaYYYYMM("JAN26")).toBe("202601");
+    expect(periodoParaYYYYMM("DEC26")).toBe("202612");
+    expect(periodoParaYYYYMM("202601")).toBe("202601");
+    expect(() => periodoParaYYYYMM("FY26")).toThrow(/Período mensal inesperado/);
   });
 
   it("preserva membro da dimensão sem nenhum valor na fato (round-trip fiel)", () => {
