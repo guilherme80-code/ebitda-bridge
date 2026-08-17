@@ -5,12 +5,18 @@ EBITDA e replicá-los no Databricks. Contém, para cada modelo: dimensões com
 chave e propriedades, medidas/contas, granularidade e o **de-para coluna a
 coluna** entre SAC ↔ Databricks ↔ PostgreSQL ↔ arquivos de export (Excel).
 
-Referências: `docs/modelo-indicadores.md` (contrato de importação) e
+Referências: `docs/fluxo-sac-databricks-app.md` (fluxo completo de ponta a
+ponta, com a estrutura REAL dos modelos criados no SAC — `FOUND_EBITDA` e
+`FOUND_EBITDA_EXPLANATIONS` — e as regras de extração),
+`docs/modelo-indicadores.md` (contrato de importação) e
 `docs/esquema-banco.md` (esquema físico do banco).
 
 ## Convenções comuns aos dois modelos
 
-- **Granularidade: versão × mês.** Versões: `ACTUAL`, `BUDGET`, `MRF1`…`MRF7`.
+- **Granularidade: versão × mês.** Versões: `ACTUAL`, `BUDGET`, `MRF1`…`MRF7`
+  (pendência: o SAC já tem `MRF08_2026`, mas o painel ainda não aceita MRF8+ —
+  deixe versões além de MRF7 fora da extração; ver
+  `docs/fluxo-sac-databricks-app.md`).
   Períodos: somente meses, no padrão SAP SAC **`YYYYMM`** (ex.: `202601` =
   jan/2026). O formato antigo `JAN26`…`DEC26` continua aceito na importação.
   NÃO carregue FY nem trimestres — o painel deriva FY/Q somando meses (taxas
@@ -114,30 +120,32 @@ com valores por versão × mês, e uma lista de **itens do bridge** vinculados.
 |---|---|
 | Dimensão **Versão** | `ACTUAL`, `BUDGET`, `MRF1`…`MRF7` |
 | Dimensão **Tempo** | Mensal, `YYYYMM` (ex.: `202601`…`202612`) |
-| Dimensão **Linha** (genérica, com propriedades) | Um membro por par explicação + linha. Como IDs de membro no SAC são globais na dimensão, o **ID técnico do membro é a chave composta serializada** `<explicacao>|<linha>` (ex.: `Iron Ores|Freight`); o rótulo exibido (description) é `linha`, e `explicacao` é propriedade |
+| Dimensão **Linha** (genérica, com propriedades) | Um membro por linha. **Decisão adotada no modelo real (`FOUND_EBITDA_EXPLANATIONS`): o ID do membro é o próprio rótulo da linha** (ex.: `Freight`), com a explicação na propriedade "Explanation EBITDA". **Premissa:** rótulos de linha globalmente únicos entre explicações. A alternativa com ID composto `<explicacao>|<linha>` (que dispensa a premissa) permanece válida caso rótulos repetidos venham a ser necessários — ver nota abaixo |
 | Medidas | `valor` e `kt` (volume, opcional — só linhas de preço) |
 
 Célula = Versão × Mês × Linha → valor (e kt quando aplicável). O impacto em
 $m NÃO é armazenado: o painel calcula na leitura
-(`preço`: sentido × Δvalor × kt ÷ 1000; `valor`: sentido × Δvalor).
+(`preço`: sentido × Δvalor × kt, sem conversão de unidade — valor e kt devem
+estar em escalas cujo produto já seja $m; `valor`: sentido × Δvalor).
 
 ### Dimensão "Linha" — propriedades
 
 | Elemento SAC | Valores | Obrigatório |
 |---|---|---|
-| **ID do membro** | `<explicacao>|<linha>` serializado com `|` (ex.: `Iron Ores|Freight`). Garante unicidade global mesmo com rótulos repetidos entre explicações: `Iron Ores|Freight` e `Coal|Freight` são membros distintos. Para a serialização ser injetiva, **o caractere `|` é PROIBIDO em `explicacao` e em `linha`** (senão `A|B`+`C` colidiria com `A`+`B|C`); o importador rejeita valores com `|` nessas colunas | sim |
+| **ID do membro** | **Modelo real: o rótulo `linha` puro** (ex.: `Freight`), exigindo rótulos globalmente únicos entre explicações. Alternativa documentada: chave composta serializada `<explicacao>|<linha>` (ex.: `Iron Ores|Freight`), que admite rótulos repetidos (`Iron Ores|Freight` e `Coal|Freight` seriam membros distintos). Em ambos os casos **o caractere `|` é PROIBIDO em `explicacao` e em `linha`** (na forma composta, para a serialização ser injetiva); o importador rejeita valores com `|` nessas colunas | sim |
 | **Description (rótulo exibido)** | o rótulo `linha` (ex.: `Freight`) | sim |
-| propriedade `explicacao` | nome da explicação (ex.: `Iron Ores`) — parte da chave composta | sim |
+| propriedade `explicacao` (no modelo real: "Explanation EBITDA") | nome da explicação (ex.: `Iron Ores`) | sim |
 | `tipo` | `preco` (valor é preço USD/t) \| `valor` (montante MUSD) | sim (padrão `preco`) |
 | `sentido` | `1` (aumento melhora o EBITDA) \| `-1` (piora — custo) | sim (padrão `-1`) |
 | `unidade` | unidade exibida (ex.: `Price $/t`) — igual para todas as linhas da mesma explicação | não |
 
-**A identidade da linha é o par `explicacao` + `linha`** — o mesmo rótulo
-pode existir em explicações diferentes; duplicar o par dentro da mesma
-explicação interrompe a carga. Nas outras pontas (Databricks/Postgres/Excel)
-a chave fica em duas colunas separadas; só o SAC serializa as duas no ID do
-membro. A ordem das linhas na dimensão define a ordem de exibição, e
-explicações aparecem na ordem da primeira linha.
+**Nas pontas Databricks/Postgres/Excel a identidade da linha é o par
+`explicacao` + `linha`** (duas colunas separadas) — duplicar o par dentro da
+mesma explicação interrompe a carga. No SAC, o modelo real usa o rótulo puro
+como ID (o que na prática também exige unicidade do rótulo entre explicações
+— premissa registrada); a serialização composta no ID é a alternativa quando
+rótulos repetidos forem necessários. A ordem das linhas na dimensão define a
+ordem de exibição, e explicações aparecem na ordem da primeira linha.
 
 ### Tabelas no Databricks (contrato)
 
@@ -160,8 +168,8 @@ Excel, ordene as linhas por `sort_order` antes de gravar a aba "Linhas".
 
 | SAC (dimensão Linha) | Databricks (tabela linhas) | PostgreSQL | Excel aba "Linhas" |
 |---|---|---|---|
-| ID do membro = `<explicacao>|<linha>` | `explicacao` + `linha` (duas colunas) | `market_indicators.title` + `market_indicator_lines.label` | `explicacao` + `linha` |
-| propriedade `explicacao` | `explicacao` | `market_indicators.title` | `explicacao` |
+| ID do membro (rótulo puro no modelo real; alternativa `<explicacao>|<linha>`) | `explicacao` + `linha` (duas colunas) | `market_indicators.title` + `market_indicator_lines.label` | `explicacao` + `linha` |
+| propriedade `explicacao` ("Explanation EBITDA") | `explicacao` | `market_indicators.title` | `explicacao` |
 | description (rótulo exibido) | `linha` | `market_indicator_lines.label` | `linha` |
 | propriedade `tipo` | `tipo` (`preco`/`valor`) | `kind` (`price`/`amount`) | `tipo` (`preco`/`valor`) |
 | propriedade `sentido` | `sentido` (1/−1) | `direction` (1/−1) | `sentido` (1/−1) |
@@ -179,7 +187,7 @@ mesma explicação.
 |---|---|---|---|
 | Versão | `versao` | via `scenario_id` mensal | `versao` |
 | Mês | `periodo` | via `scenario_id` | `periodo` |
-| Membro Linha (`<explicacao>|<linha>`) | `explicacao` + `linha` (duas colunas) | `line_id` (junção com `market_indicator_lines`) | `explicacao` + `linha` |
+| Membro Linha + propriedade `explicacao` | `explicacao` + `linha` (duas colunas) | `line_id` (junção com `market_indicator_lines`) | `explicacao` + `linha` |
 | Medida valor | `valor` | `value` | `valor` |
 | Medida kt | `kt` | `volume_kt` | `kt` (opcional) |
 
@@ -220,8 +228,9 @@ colunas acima (linhas ordenadas por `sort_order`) e rodar
    dimensão de conta Indicador; carregar membros da aba "Itens" e valores da
    aba "Indicadores" do export.
 2. **Explicações**: criar modelo com Versão + Tempo mensal + dimensão Linha
-   (chave composta `explicacao`+`linha`; propriedades `tipo`, `sentido`,
-   `unidade`) e medidas `valor`/`kt`; carregar da aba "Linhas" e "Explicacoes".
+   (ID = rótulo da linha, com a explicação em propriedade — ver decisão acima;
+   propriedades `tipo`, `sentido`, `unidade`) e medidas `valor`/`kt`;
+   carregar da aba "Linhas" e "Explicacoes".
 3. **Databricks**: criar as tabelas espelhando as abas (uma linha da tabela =
    uma linha da aba), com `sort_order` nas tabelas de dimensão (itens e
    linhas); validar o Modelo 1 com o comando `import-databricks` e carregar o

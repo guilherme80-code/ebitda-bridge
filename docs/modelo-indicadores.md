@@ -7,6 +7,10 @@ o modelo do SAP SAC e o contrato para as tabelas no Databricks:
 - **Fato "Indicadores"** — registros enxutos: versão × período × item ×
   indicador → valor.
 
+Fluxo completo SAC → Databricks → APP (estrutura real dos modelos no SAC,
+regras de extração e transformações na leitura):
+`docs/fluxo-sac-databricks-app.md`.
+
 No Excel são duas abas ("Itens" e "Indicadores"); no Databricks, duas tabelas
 (uma linha da tabela = uma linha da aba).
 

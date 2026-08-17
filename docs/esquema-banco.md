@@ -8,6 +8,8 @@ Dois modelos de dados:
    valores por versão × mês.
 
 Ambos se apoiam na tabela comum `scenarios` (catálogo de cenários).
+Fluxo completo SAC → Databricks → APP (estrutura real dos modelos no SAC e
+transformações na leitura): `docs/fluxo-sac-databricks-app.md`.
 
 ## Diagrama
 
