@@ -1,5 +1,4 @@
 import {
-  boolean,
   doublePrecision,
   integer,
   pgTable,
@@ -24,86 +23,109 @@ export const scenariosTable = pgTable("scenarios", {
 });
 
 /**
- * Raw data model (mirrors the "Cálculo" sheet of Modelo Bridge.xlsx).
- * Scenarios store only raw inputs — quantity and amount per version/period.
- * All performance effects (price, volume, mix, forex, fixed cost, input
- * price, usage, others, stock variation) are computed at comparison time
- * from the raw facts of the selected source/target pair.
+ * Formas "largas" em memória (espelham a aba "Cálculo" do Modelo Bridge.xlsx).
+ * As tabelas físicas correspondentes (scenario_params, sales_facts,
+ * fixed_cost_facts, input_price_facts, misc_facts) foram REMOVIDAS do banco:
+ * o seed converte bancos antigos na primeira inicialização e depois as
+ * derruba (DROP). Estes tipos permanecem porque o cálculo do bridge e os
+ * importadores continuam trabalhando com as formas largas em memória — o
+ * painel as reconstrói na leitura a partir de dim_items + indicator_facts.
  */
 
-// Scenario-level parameters ("Cálculo" rows 125/144/150-152):
-// fx rate (BRL/USD), crude steel production, EBITDA (from DRE) and the
-// domestic share of EBITDA cost used by the forex driver.
-export const scenarioParamsTable = pgTable("scenario_params", {
-  scenarioId: text("scenario_id").primaryKey(),
-  fxRate: doublePrecision("fx_rate").notNull(),
+// Parâmetros por cenário ("Cálculo" linhas 125/144/150-152).
+export type ScenarioParams = {
+  scenarioId: string;
+  fxRate: number;
   // Câmbio específico do bloco de custo fixo (E125/H125 na aba Cálculo);
   // pode diferir ligeiramente do câmbio geral (E152/H152).
-  fcFxRate: doublePrecision("fc_fx_rate").notNull().default(0),
-  crudeSteelKt: doublePrecision("crude_steel_kt").notNull(),
-  ebitdaKusd: doublePrecision("ebitda_kusd").notNull(),
-  dmCostShare: doublePrecision("dm_cost_share").notNull().default(0.4),
-});
+  fcFxRate: number;
+  crudeSteelKt: number;
+  ebitdaKusd: number;
+  dmCostShare: number;
+};
+export type InsertScenarioParams = Omit<ScenarioParams, "fcFxRate" | "dmCostShare"> & {
+  fcFxRate?: number;
+  dmCostShare?: number;
+};
 
-// Sales + variable cost per product ("Cálculo" rows 17-47 and 50-80).
-// currency = "BRL" for domestic-market products (price effect computed in
-// local currency; difference vs USD goes to the forex driver), "USD" for
-// export/intragroup products. domestic = true when the product's revenue is
-// exposed to forex (rows included in H150).
-export const salesFactsTable = pgTable("sales_facts", {
-  id: serial("id").primaryKey(),
-  scenarioId: text("scenario_id").notNull(),
-  productKey: text("product_key").notNull(),
-  label: text("label").notNull(),
-  currency: text("currency").notNull(), // BRL | USD
-  domestic: boolean("domestic").notNull().default(false),
-  groupLabel: text("group_label"),
-  qtyKt: doublePrecision("qty_kt").notNull(),
-  amountKusd: doublePrecision("amount_kusd").notNull(),
-  varCostKusd: doublePrecision("var_cost_kusd").notNull(),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
+// Vendas + custo variável por produto ("Cálculo" linhas 17-47 e 50-80).
+// currency = "BRL" para mercado interno (efeito preço em moeda local;
+// diferença vs USD vai para o driver de câmbio), "USD" para exportação/
+// intragrupo. domestic = true quando a receita é exposta ao câmbio.
+export type SalesFact = {
+  id: number;
+  scenarioId: string;
+  productKey: string;
+  label: string;
+  currency: string; // BRL | USD
+  domestic: boolean;
+  groupLabel: string | null;
+  qtyKt: number;
+  amountKusd: number;
+  varCostKusd: number;
+  sortOrder: number;
+};
+export type InsertSalesFact = Omit<SalesFact, "id" | "domestic" | "groupLabel" | "sortOrder"> & {
+  domestic?: boolean;
+  groupLabel?: string | null;
+  sortOrder?: number;
+};
 
-// Fixed cost per category ("Cálculo" rows 116-124). usdDenominated = true for
-// the "... USD" categories, which have no forex split.
-export const fixedCostFactsTable = pgTable("fixed_cost_facts", {
-  id: serial("id").primaryKey(),
-  scenarioId: text("scenario_id").notNull(),
-  category: text("category").notNull(),
-  groupLabel: text("group_label"),
-  amountKusd: doublePrecision("amount_kusd").notNull(),
-  usdDenominated: boolean("usd_denominated").notNull().default(false),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
+// Custo fixo por categoria ("Cálculo" linhas 116-124). usdDenominated = true
+// para as categorias "... USD", sem abertura de câmbio.
+export type FixedCostFact = {
+  id: number;
+  scenarioId: string;
+  category: string;
+  groupLabel: string | null;
+  amountKusd: number;
+  usdDenominated: boolean;
+  sortOrder: number;
+};
+export type InsertFixedCostFact = Omit<
+  FixedCostFact,
+  "id" | "groupLabel" | "usdDenominated" | "sortOrder"
+> & { groupLabel?: string | null; usdDenominated?: boolean; sortOrder?: number };
 
-// Input price items ("Cálculo" rows 128-144). Two shapes:
-//  - priced items: unitPriceUsd + yieldFactor (effect = Δprice × yield × crude
-//    steel production of the target scenario)
-//  - direct items (Alloys, Zinc, Natural Gas...): amountKusd holds the level
-//    of the item relative to the reference; effect = target − source.
-export const inputPriceFactsTable = pgTable("input_price_facts", {
-  id: serial("id").primaryKey(),
-  scenarioId: text("scenario_id").notNull(),
-  item: text("item").notNull(),
-  groupLabel: text("group_label"),
-  unitPriceUsd: doublePrecision("unit_price_usd"),
-  yieldFactor: doublePrecision("yield_factor"),
-  amountKusd: doublePrecision("amount_kusd"),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
+// Itens de preço de insumo ("Cálculo" linhas 128-144). Dois formatos:
+//  - itens precificados: unitPriceUsd + yieldFactor
+//  - itens diretos (Alloys, Zinc, Natural Gas...): amountKusd.
+export type InputPriceFact = {
+  id: number;
+  scenarioId: string;
+  item: string;
+  groupLabel: string | null;
+  unitPriceUsd: number | null;
+  yieldFactor: number | null;
+  amountKusd: number | null;
+  sortOrder: number;
+};
+export type InsertInputPriceFact = Omit<
+  InputPriceFact,
+  "id" | "groupLabel" | "unitPriceUsd" | "yieldFactor" | "amountKusd" | "sortOrder"
+> & {
+  groupLabel?: string | null;
+  unitPriceUsd?: number | null;
+  yieldFactor?: number | null;
+  amountKusd?: number | null;
+  sortOrder?: number;
+};
 
-// Usage / Others / Stock-variation line items ("Cálculo" rows 147, 155-181).
-// amountKusd is the level of the item in the scenario; the driver effect of a
-// comparison is target − source per line. driver = usage | others | stock_variation.
-export const miscFactsTable = pgTable("misc_facts", {
-  id: serial("id").primaryKey(),
-  scenarioId: text("scenario_id").notNull(),
-  driver: text("driver").notNull(),
-  label: text("label").notNull(),
-  groupLabel: text("group_label"),
-  amountKusd: doublePrecision("amount_kusd").notNull(),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
+// Itens de Usage / Outros / Variação de estoque ("Cálculo" linhas 147,
+// 155-181). driver = usage | others | stock_variation.
+export type MiscFact = {
+  id: number;
+  scenarioId: string;
+  driver: string;
+  label: string;
+  groupLabel: string | null;
+  amountKusd: number;
+  sortOrder: number;
+};
+export type InsertMiscFact = Omit<MiscFact, "id" | "groupLabel" | "sortOrder"> & {
+  groupLabel?: string | null;
+  sortOrder?: number;
+};
 
 // ---------------------------------------------------------------------------
 // Modelo dimensional (espelha os modelos do SAP SAC / Databricks).
@@ -163,35 +185,6 @@ export const insertScenarioSchema = createInsertSchema(scenariosTable);
 export type InsertScenario = z.infer<typeof insertScenarioSchema>;
 export type Scenario = typeof scenariosTable.$inferSelect;
 
-export const insertScenarioParamsSchema =
-  createInsertSchema(scenarioParamsTable);
-export type InsertScenarioParams = z.infer<typeof insertScenarioParamsSchema>;
-export type ScenarioParams = typeof scenarioParamsTable.$inferSelect;
-
-export const insertSalesFactSchema = createInsertSchema(salesFactsTable).omit({
-  id: true,
-});
-export type InsertSalesFact = z.infer<typeof insertSalesFactSchema>;
-export type SalesFact = typeof salesFactsTable.$inferSelect;
-
-export const insertFixedCostFactSchema = createInsertSchema(
-  fixedCostFactsTable,
-).omit({ id: true });
-export type InsertFixedCostFact = z.infer<typeof insertFixedCostFactSchema>;
-export type FixedCostFact = typeof fixedCostFactsTable.$inferSelect;
-
-export const insertInputPriceFactSchema = createInsertSchema(
-  inputPriceFactsTable,
-).omit({ id: true });
-export type InsertInputPriceFact = z.infer<typeof insertInputPriceFactSchema>;
-export type InputPriceFact = typeof inputPriceFactsTable.$inferSelect;
-
-export const insertMiscFactSchema = createInsertSchema(miscFactsTable).omit({
-  id: true,
-});
-export type InsertMiscFact = z.infer<typeof insertMiscFactSchema>;
-export type MiscFact = typeof miscFactsTable.$inferSelect;
-
 // User-entered explanations of the EBITDA variation between a source and
 // target scenario. One pair can have many explanations; they are kept for
 // anyone who consults the pair in the future.
@@ -206,41 +199,37 @@ export const bridgeExplanationsTable = pgTable("bridge_explanations", {
     .defaultNow(),
 });
 
-// Market explanations: reference tables (e.g. Iron Ores) imported from a
-// separate source, scoped to a source/target scenario pair. Each explanation
-// has detail lines (price source/target, variation, volume, $m impact) and a
-// list of impacted bridge items (e.g. Fines, Pellets, Lumps) that open the
-// explanation pop-up when clicked.
-export const marketExplanationsTable = pgTable("market_explanations", {
-  id: serial("id").primaryKey(),
-  sourceId: text("source_id").notNull(),
-  targetId: text("target_id").notNull(),
-  title: text("title").notNull(), // e.g. "Iron Ores"
-  unitLabel: text("unit_label").notNull().default("Price $/t"),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
+// Explicações de mercado LEGADAS (pareadas por origem×destino). As tabelas
+// físicas (market_explanations, market_explanation_lines,
+// market_explanation_items) foram removidas do banco: o seed converte bancos
+// antigos para o formato por versão e depois as derruba (DROP). Os tipos
+// permanecem porque a conversão (market-migrate) trabalha com estas formas.
+export type MarketExplanation = {
+  id: number;
+  sourceId: string;
+  targetId: string;
+  title: string; // e.g. "Iron Ores"
+  unitLabel: string;
+  sortOrder: number;
+};
 
-export const marketExplanationLinesTable = pgTable("market_explanation_lines", {
-  id: serial("id").primaryKey(),
-  explanationId: integer("explanation_id")
-    .notNull()
-    .references(() => marketExplanationsTable.id, { onDelete: "cascade" }),
-  label: text("label").notNull(),
-  sourceValue: doublePrecision("source_value"),
-  targetValue: doublePrecision("target_value"),
-  varValue: doublePrecision("var_value"),
-  volumeKt: doublePrecision("volume_kt"),
-  impactMusd: doublePrecision("impact_musd").notNull(),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
+export type MarketExplanationLine = {
+  id: number;
+  explanationId: number;
+  label: string;
+  sourceValue: number | null;
+  targetValue: number | null;
+  varValue: number | null;
+  volumeKt: number | null;
+  impactMusd: number;
+  sortOrder: number;
+};
 
-export const marketExplanationItemsTable = pgTable("market_explanation_items", {
-  id: serial("id").primaryKey(),
-  explanationId: integer("explanation_id")
-    .notNull()
-    .references(() => marketExplanationsTable.id, { onDelete: "cascade" }),
-  item: text("item").notNull(), // label of the impacted bridge item
-});
+export type MarketExplanationItem = {
+  id: number;
+  explanationId: number;
+  item: string; // label of the impacted bridge item
+};
 
 // Novo modelo (por versão): cada indicador (ex.: Iron Ores) tem linhas (ex.:
 // "Iron ore MB 62% (1m lag)") com VALORES armazenados por cenário MENSAL
@@ -297,30 +286,6 @@ export type MarketIndicatorValue = typeof marketIndicatorValuesTable.$inferSelec
 export type InsertMarketIndicatorValue = typeof marketIndicatorValuesTable.$inferInsert;
 export type MarketIndicatorItem = typeof marketIndicatorItemsTable.$inferSelect;
 export type InsertMarketIndicatorItem = typeof marketIndicatorItemsTable.$inferInsert;
-
-export const insertMarketExplanationSchema = createInsertSchema(
-  marketExplanationsTable,
-).omit({ id: true });
-export type InsertMarketExplanation = z.infer<typeof insertMarketExplanationSchema>;
-export type MarketExplanation = typeof marketExplanationsTable.$inferSelect;
-
-export const insertMarketExplanationLineSchema = createInsertSchema(
-  marketExplanationLinesTable,
-).omit({ id: true });
-export type InsertMarketExplanationLine = z.infer<
-  typeof insertMarketExplanationLineSchema
->;
-export type MarketExplanationLine =
-  typeof marketExplanationLinesTable.$inferSelect;
-
-export const insertMarketExplanationItemSchema = createInsertSchema(
-  marketExplanationItemsTable,
-).omit({ id: true });
-export type InsertMarketExplanationItem = z.infer<
-  typeof insertMarketExplanationItemSchema
->;
-export type MarketExplanationItem =
-  typeof marketExplanationItemsTable.$inferSelect;
 
 export const insertBridgeExplanationSchema = createInsertSchema(
   bridgeExplanationsTable,

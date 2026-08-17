@@ -1,18 +1,13 @@
 import {
   db,
   scenariosTable,
-  scenarioParamsTable,
-  salesFactsTable,
-  fixedCostFactsTable,
-  inputPriceFactsTable,
-  miscFactsTable,
   dimItemsTable,
   indicatorFactsTable,
   type InsertDimItem,
   type InsertIndicatorFact,
-  marketExplanationsTable,
-  marketExplanationLinesTable,
-  marketExplanationItemsTable,
+  type MarketExplanation,
+  type MarketExplanationLine,
+  type MarketExplanationItem,
   marketIndicatorsTable,
   marketIndicatorLinesTable,
   marketIndicatorValuesTable,
@@ -20,7 +15,7 @@ import {
 } from "@workspace/db";
 import { convertLegacyMarketExplanations, type ConvertedIndicator } from "./market-migrate";
 import { convertWideToDimensional } from "./indicator-model";
-import { inArray, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import seed from "../seed/bridge-seed.json";
 import { logger } from "./logger";
 
@@ -44,6 +39,47 @@ function chunk<T>(rows: T[], size = 500): T[][] {
 const SEED_LOCK_KEY = 764_211_003; // arbitrary app-wide advisory lock id
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Tabelas legadas: convertidas na primeira inicialização (quando ainda têm
+// dados) e derrubadas em seguida. Os SELECTs abaixo são SQL bruto guardado
+// por to_regclass porque as tabelas não existem mais no schema Drizzle — e
+// podem nem existir no banco.
+const LEGACY_TABLES = [
+  "market_explanation_items",
+  "market_explanation_lines",
+  "market_explanations",
+  "misc_facts",
+  "input_price_facts",
+  "fixed_cost_facts",
+  "sales_facts",
+  "scenario_params",
+] as const;
+
+async function legacyRows(
+  executor: Pick<Tx, "execute">,
+  table: (typeof LEGACY_TABLES)[number],
+): Promise<Row[]> {
+  const exists = await executor.execute(
+    sql`SELECT to_regclass(${"public." + table}) IS NOT NULL AS present`,
+  );
+  if (!(exists.rows[0] as { present: boolean }).present) return [];
+  const res = await executor.execute(sql.raw(`SELECT * FROM "${table}"`));
+  return res.rows as Row[];
+}
+
+/**
+ * Derruba as tabelas legadas — só é chamada depois que a conversão (quando
+ * necessária) terminou com sucesso. Idempotente; roda sob a mesma advisory
+ * lock do seed para não competir com outra instância convertendo.
+ */
+async function dropLegacyTables(): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
+    for (const table of LEGACY_TABLES) {
+      await tx.execute(sql.raw(`DROP TABLE IF EXISTS "${table}" CASCADE`));
+    }
+  });
+}
 
 // Indicadores de explicação (formato por versão): valores por linha × cenário
 // mensal. Seções ausentes em seeds antigos são toleradas.
@@ -116,32 +152,70 @@ async function insertIndicators(tx: Tx, indicators: ConvertedIndicator[]): Promi
 async function ensureMarketIndicators(): Promise<void> {
   const existing = await db.select({ id: marketIndicatorsTable.id }).from(marketIndicatorsTable).limit(1);
   if (existing.length > 0) return;
-  const legacyHeads = await db.select().from(marketExplanationsTable);
   const fromSeed = seedIndicators();
-  if (legacyHeads.length === 0 && fromSeed.length === 0) return;
 
   await db.transaction(async (tx) => {
+    // Toda leitura das tabelas legadas acontece DENTRO da advisory lock:
+    // fora dela, outra instância poderia derrubá-las entre o to_regclass e o
+    // SELECT (corrida de autoscale).
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
     const check = await tx.select({ id: marketIndicatorsTable.id }).from(marketIndicatorsTable).limit(1);
     if (check.length > 0) return;
+    const legacyHeads = (await legacyRows(tx, "market_explanations")).map(
+      (r): MarketExplanation => ({
+        id: num(r.id),
+        sourceId: String(r.source_id),
+        targetId: String(r.target_id),
+        title: String(r.title),
+        unitLabel: String(r.unit_label),
+        sortOrder: num(r.sort_order),
+      }),
+    );
+    if (legacyHeads.length === 0 && fromSeed.length === 0) return;
     if (legacyHeads.length > 0) {
       logger.info("Convertendo explicações legadas (pareadas) para o formato por versão");
       const isMonthly = (id: string) => /^fy\d{2}_m\d{2}_/.test(id);
+      // Pares mensais carregam os valores originais; pares FY/trimestre são
+      // derivados na leitura (soma dos meses) e por isso são redundantes —
+      // mas só descartamos quando há pelo menos um par mensal para converter.
       const monthlyHeads = legacyHeads.filter(
         (h) => isMonthly(h.sourceId) && isMonthly(h.targetId),
       );
-      const headIds = monthlyHeads.map((h) => h.id);
-      if (headIds.length > 0) {
-        const [legacyLines, legacyItems] = await Promise.all([
-          tx
-            .select()
-            .from(marketExplanationLinesTable)
-            .where(inArray(marketExplanationLinesTable.explanationId, headIds)),
-          tx
-            .select()
-            .from(marketExplanationItemsTable)
-            .where(inArray(marketExplanationItemsTable.explanationId, headIds)),
-        ]);
+      if (monthlyHeads.length === 0) {
+        throw new Error(
+          "Explicações legadas encontradas, mas nenhum par é mensal " +
+            "(fyNN_mMM_*): a conversão automática não sabe derivar valores " +
+            "mensais de pares FY/trimestre. Reimporte as explicações no " +
+            "formato por versão (docs/modelo-indicadores.md) antes de subir " +
+            "esta versão. Nada foi alterado.",
+        );
+      }
+      const headIds = new Set(monthlyHeads.map((h) => h.id));
+      {
+        const legacyLines = (await legacyRows(tx, "market_explanation_lines"))
+          .map(
+            (r): MarketExplanationLine => ({
+              id: num(r.id),
+              explanationId: num(r.explanation_id),
+              label: String(r.label),
+              sourceValue: numOrNull(r.source_value),
+              targetValue: numOrNull(r.target_value),
+              varValue: numOrNull(r.var_value),
+              volumeKt: numOrNull(r.volume_kt),
+              impactMusd: num(r.impact_musd),
+              sortOrder: num(r.sort_order),
+            }),
+          )
+          .filter((l) => headIds.has(l.explanationId));
+        const legacyItems = (await legacyRows(tx, "market_explanation_items"))
+          .map(
+            (r): MarketExplanationItem => ({
+              id: num(r.id),
+              explanationId: num(r.explanation_id),
+              item: String(r.item),
+            }),
+          )
+          .filter((i) => headIds.has(i.explanationId));
         await insertIndicators(
           tx,
           convertLegacyMarketExplanations(monthlyHeads, legacyLines, legacyItems),
@@ -254,13 +328,55 @@ async function ensureDimensionalModel(): Promise<void> {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
     const check = await tx.select({ item: dimItemsTable.item }).from(dimItemsTable).limit(1);
     if (check.length > 0) return;
-    const [params, sales, fixed, inputs, misc] = await Promise.all([
-      tx.select().from(scenarioParamsTable),
-      tx.select().from(salesFactsTable),
-      tx.select().from(fixedCostFactsTable),
-      tx.select().from(inputPriceFactsTable),
-      tx.select().from(miscFactsTable),
-    ]);
+    const params = (await legacyRows(tx, "scenario_params")).map((r) => ({
+      scenarioId: String(r.scenario_id),
+      fxRate: num(r.fx_rate),
+      fcFxRate: num(r.fc_fx_rate),
+      crudeSteelKt: num(r.crude_steel_kt),
+      ebitdaKusd: num(r.ebitda_kusd),
+      dmCostShare: num(r.dm_cost_share),
+    }));
+    const sales = (await legacyRows(tx, "sales_facts")).map((r) => ({
+      id: num(r.id),
+      scenarioId: String(r.scenario_id),
+      productKey: String(r.product_key),
+      label: String(r.label),
+      currency: String(r.currency),
+      domestic: Boolean(r.domestic),
+      groupLabel: r.group_label == null ? null : String(r.group_label),
+      qtyKt: num(r.qty_kt),
+      amountKusd: num(r.amount_kusd),
+      varCostKusd: num(r.var_cost_kusd),
+      sortOrder: num(r.sort_order),
+    }));
+    const fixed = (await legacyRows(tx, "fixed_cost_facts")).map((r) => ({
+      id: num(r.id),
+      scenarioId: String(r.scenario_id),
+      category: String(r.category),
+      groupLabel: r.group_label == null ? null : String(r.group_label),
+      amountKusd: num(r.amount_kusd),
+      usdDenominated: Boolean(r.usd_denominated),
+      sortOrder: num(r.sort_order),
+    }));
+    const inputs = (await legacyRows(tx, "input_price_facts")).map((r) => ({
+      id: num(r.id),
+      scenarioId: String(r.scenario_id),
+      item: String(r.item),
+      groupLabel: r.group_label == null ? null : String(r.group_label),
+      unitPriceUsd: numOrNull(r.unit_price_usd),
+      yieldFactor: numOrNull(r.yield_factor),
+      amountKusd: numOrNull(r.amount_kusd),
+      sortOrder: num(r.sort_order),
+    }));
+    const misc = (await legacyRows(tx, "misc_facts")).map((r) => ({
+      id: num(r.id),
+      scenarioId: String(r.scenario_id),
+      driver: String(r.driver),
+      label: String(r.label),
+      groupLabel: r.group_label == null ? null : String(r.group_label),
+      amountKusd: num(r.amount_kusd),
+      sortOrder: num(r.sort_order),
+    }));
     if (params.length === 0 && sales.length === 0) return;
     logger.info("Convertendo tabelas largas para o modelo dimensional (dim_items + indicator_facts)");
     await insertDimensional(tx, convertWideToDimensional({ params, sales, fixed, inputs, misc }));
@@ -312,6 +428,10 @@ export async function seedIfEmpty(): Promise<void> {
     // formato por versão. Nunca sobrescreve dados já no formato novo.
     await ensureDimensionalModel();
     await ensureMarketIndicators();
+    // Conversões concluídas (ou nada a converter): as tabelas legadas não
+    // são mais necessárias. Se qualquer conversão falhar, nada é derrubado
+    // (a exceção interrompe a inicialização antes daqui).
+    await dropLegacyTables();
     return;
   }
 
@@ -342,6 +462,9 @@ export async function seedIfEmpty(): Promise<void> {
     await insertDimensional(tx, seedDimensional());
     await insertIndicators(tx, seedIndicators());
   });
+  // Bancos recém-publicados podem carregar as tabelas legadas vazias
+  // (o publish copia o esquema): derruba depois do seed.
+  await dropLegacyTables();
 
   logger.info("Seed do bridge concluído");
 }

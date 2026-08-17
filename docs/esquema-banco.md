@@ -131,13 +131,17 @@ conjunto de itens).
 
 Granularidade: **versão × mês × item × indicador → 1 valor**.
 
-### Tabelas largas legadas (somente leitura)
+### Tabelas largas legadas (removidas)
 
 `scenario_params`, `sales_facts`, `fixed_cost_facts`, `input_price_facts` e
-`misc_facts` são o formato antigo. Permanecem no esquema apenas para a
-conversão automática de bancos já publicados (na primeira subida, o servidor
-converte o conteúdo delas em `dim_items` + `indicator_facts`); **não recebem
-mais escrita** e o painel não as lê.
+`misc_facts` eram o formato antigo e **não existem mais no banco**. Bancos já
+publicados com dados nesse formato são convertidos automaticamente na
+primeira subida (`dim_items` + `indicator_facts`); depois da conversão bem-
+sucedida (ou quando as tabelas estão vazias) o servidor as derruba
+(`DROP TABLE IF EXISTS`, sob a mesma advisory lock do seed). Se a conversão
+falhar, nada é derrubado e a subida aborta. As formas largas continuam
+existindo apenas como tipos em memória (`lib/db/src/schema/bridge.ts`),
+reconstruídas na leitura pelo painel.
 
 ## Modelo 2 — Explicações de mercado
 
@@ -190,8 +194,9 @@ origem × destino.
   origem × destino (id, source_id, target_id, value_musd, text, created_at).
 - `market_explanations`, `market_explanation_lines`,
   `market_explanation_items` — formato legado das explicações (por par de
-  cenários); convertido automaticamente para o modelo por versão na primeira
-  subida e não usado mais para escrita.
+  cenários); **removidas do banco**: convertidas automaticamente para o
+  modelo por versão na primeira subida e derrubadas em seguida (mesma regra
+  das tabelas largas legadas).
 
 ## Observações operacionais
 

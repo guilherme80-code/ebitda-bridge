@@ -3,7 +3,8 @@ name: Dimensional model (SAC) for indicators
 description: Durable rules for the dim+fact restructure — why it exists and the invariants any future change must keep.
 ---
 
-- The DB's canonical source is the dimensional model (item dimension + lean indicator fact); the old wide tables are legacy, receive no writes, and exist only so pre-restructure databases can be converted in place at startup.
+- The DB's canonical source is the dimensional model (item dimension + lean indicator fact); the old wide/legacy tables no longer exist — the seed converts pre-restructure databases at startup and then DROPs them. The wide shapes survive only as plain in-memory TS types (read path rebuilds them from dim+fact).
+- Legacy-table access at boot must be raw SQL guarded by `to_regclass` AND happen inside the seed advisory lock — outside the lock another autoscale instance can drop the table between the existence check and the SELECT. Drop only after conversion succeeds; legacy market heads with no monthly pair must abort the boot (FY/Q pairs alone are not convertible), never be silently dropped.
 - **Why:** mirrors the two SAP SAC models the user replicates in Databricks; an item is a global key whose properties must be identical across ALL scenarios — per-scenario property variation is invalid by design.
 - **How to apply:** any importer/exporter must honor the two-part file contract (dimension sheet/table + lean fact) with back-compat for the old single-sheet format; when both carry properties, conflicts must abort, never win silently.
 - Display order comes from the DIMENSION's row order, never from first appearance in the fact — sparse scenarios would silently reorder items otherwise.

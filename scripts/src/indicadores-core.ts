@@ -13,11 +13,6 @@ import {
   db,
   pool,
   scenariosTable,
-  scenarioParamsTable,
-  salesFactsTable,
-  fixedCostFactsTable,
-  inputPriceFactsTable,
-  miscFactsTable,
   dimItemsTable,
   indicatorFactsTable,
   type InsertScenario,
@@ -716,18 +711,13 @@ export function montarDados(
 /**
  * Substitui todos os dados do painel dentro de uma única transação.
  * Grava o modelo dimensional (dim_items + indicator_facts), a fonte canônica
- * lida pelo painel. As tabelas largas legadas são apenas limpas — nenhum
- * dado novo é gravado nelas.
+ * lida pelo painel. (As tabelas largas legadas não existem mais no banco —
+ * são derrubadas pelo seed na inicialização.)
  */
 export async function gravarDados(d: Dados): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.delete(indicatorFactsTable);
     await tx.delete(dimItemsTable);
-    await tx.delete(miscFactsTable);
-    await tx.delete(inputPriceFactsTable);
-    await tx.delete(fixedCostFactsTable);
-    await tx.delete(salesFactsTable);
-    await tx.delete(scenarioParamsTable);
     await tx.delete(scenariosTable);
     const chunk = <T,>(arr: T[], n: number) =>
       Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));

@@ -20,9 +20,6 @@ import {
   db,
   pool,
   scenariosTable,
-  marketExplanationsTable,
-  marketExplanationLinesTable,
-  marketExplanationItemsTable,
   marketIndicatorsTable,
   marketIndicatorLinesTable,
   marketIndicatorValuesTable,
@@ -580,7 +577,8 @@ export async function conferirCenarios(indicadores: IndicadorMercado[]): Promise
 
 /**
  * Substitui TODOS os indicadores de explicação dentro de uma única transação.
- * Também limpa as tabelas legadas (pareadas) para não deixar dados obsoletos.
+ * (As tabelas legadas pareadas não existem mais no banco — são derrubadas
+ * pelo seed na inicialização.)
  */
 export async function gravarDadosMercado(indicadores: IndicadorMercado[]): Promise<void> {
   await conferirCenarios(indicadores);
@@ -589,9 +587,6 @@ export async function gravarDadosMercado(indicadores: IndicadorMercado[]): Promi
     await tx.delete(marketIndicatorValuesTable);
     await tx.delete(marketIndicatorLinesTable);
     await tx.delete(marketIndicatorsTable);
-    await tx.delete(marketExplanationItemsTable);
-    await tx.delete(marketExplanationLinesTable);
-    await tx.delete(marketExplanationsTable);
     for (const ind of indicadores) {
       const [head] = await tx
         .insert(marketIndicatorsTable)

@@ -3,9 +3,15 @@
  * compartilhado pelos testes (bridge-calc.test.ts, simulate.test.ts).
  * Como o seed é o mesmo usado para popular o banco, os testes acompanham
  * automaticamente o formato dos dados de produção.
+ *
+ * Usa as seções dimensionais (dim_items + indicator_facts) — a fonte
+ * canônica — reconstruindo as formas largas pelo mesmo caminho da API
+ * (buildRawScenarios).
  */
 import type { RawScenarioData } from "./bridge-calc";
 import { aggregateMonths } from "./aggregate";
+import { buildRawScenarios } from "./indicator-model";
+import type { DimItem } from "@workspace/db";
 import seed from "../seed/bridge-seed.json";
 
 /**
@@ -29,62 +35,33 @@ export function loadDerived(id: string): { data: RawScenarioData; monthIds: stri
 
 type Row = Record<string, unknown>;
 const num = (v: unknown): number => Number(v);
-const numOrNull = (v: unknown): number | null =>
-  v === null || v === undefined ? null : Number(v);
 
-/** Monta RawScenarioData a partir do seed (colunas snake_case do export). */
+let cache: Map<string, RawScenarioData> | undefined;
+
+function scenarios(): Map<string, RawScenarioData> {
+  if (cache) return cache;
+  const raw = seed as Record<string, unknown>;
+  const dims: DimItem[] = ((raw.dim_items as Row[]) ?? []).map((r) => ({
+    item: String(r.item),
+    secao: String(r.secao),
+    moeda: r.moeda == null ? null : String(r.moeda),
+    atributo: r.atributo == null ? null : String(r.atributo),
+    grupo: r.grupo == null ? null : String(r.grupo),
+    sortOrder: num(r.sort_order),
+  }));
+  const facts = ((raw.indicator_facts as Row[]) ?? []).map((r) => ({
+    scenarioId: String(r.scenario_id),
+    item: String(r.item),
+    indicador: String(r.indicador),
+    valor: num(r.valor),
+  }));
+  cache = buildRawScenarios(dims, facts);
+  return cache;
+}
+
+/** Monta RawScenarioData a partir das seções dimensionais do seed. */
 export function loadScenario(id: string): RawScenarioData {
-  const p = (seed.scenario_params as Row[]).find(
-    (r) => r.scenario_id === id,
-  );
-  if (!p) throw new Error(`cenário ${id} ausente no seed`);
-  const of = <T extends Row>(rows: Row[]): T[] =>
-    rows.filter((r) => r.scenario_id === id) as T[];
-  return {
-    params: {
-      scenarioId: id,
-      fxRate: num(p.fx_rate),
-      fcFxRate: num(p.fc_fx_rate),
-      crudeSteelKt: num(p.crude_steel_kt),
-      ebitdaKusd: num(p.ebitda_kusd),
-      dmCostShare: num(p.dm_cost_share),
-    },
-    sales: of(seed.sales_facts as Row[]).map((r) => ({
-      scenarioId: id,
-      productKey: String(r.product_key),
-      label: String(r.label),
-      groupLabel: r.group_label == null ? null : String(r.group_label),
-      currency: String(r.currency),
-      domestic: Boolean(r.domestic),
-      qtyKt: num(r.qty_kt),
-      amountKusd: num(r.amount_kusd),
-      varCostKusd: num(r.var_cost_kusd),
-      sortOrder: num(r.sort_order),
-    })),
-    fixed: of(seed.fixed_cost_facts as Row[]).map((r) => ({
-      scenarioId: id,
-      category: String(r.category),
-      groupLabel: r.group_label == null ? null : String(r.group_label),
-      amountKusd: num(r.amount_kusd),
-      usdDenominated: Boolean(r.usd_denominated),
-      sortOrder: num(r.sort_order),
-    })),
-    inputs: of(seed.input_price_facts as Row[]).map((r) => ({
-      scenarioId: id,
-      item: String(r.item),
-      groupLabel: r.group_label == null ? null : String(r.group_label),
-      unitPriceUsd: numOrNull(r.unit_price_usd),
-      yieldFactor: numOrNull(r.yield_factor),
-      amountKusd: numOrNull(r.amount_kusd),
-      sortOrder: num(r.sort_order),
-    })),
-    misc: of(seed.misc_facts as Row[]).map((r) => ({
-      scenarioId: id,
-      driver: String(r.driver),
-      label: String(r.label),
-      groupLabel: r.group_label == null ? null : String(r.group_label),
-      amountKusd: num(r.amount_kusd),
-      sortOrder: num(r.sort_order),
-    })),
-  } as RawScenarioData;
+  const data = scenarios().get(id);
+  if (!data) throw new Error(`cenário ${id} ausente no seed`);
+  return data;
 }
