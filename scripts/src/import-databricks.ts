@@ -1,11 +1,16 @@
 /**
- * Importa a fonte de indicadores DIRETO da tabela do Databricks, sem passar
- * pelo Excel. A tabela segue o contrato de docs/modelo-indicadores.md — as
- * mesmas colunas da aba única:
+ * Importa a fonte de indicadores DIRETO das tabelas do Databricks, sem passar
+ * pelo Excel. Contrato dimensional (docs/modelo-indicadores.md, modelo SAC):
  *
- *   versao | periodo | secao | item | indicador | valor | moeda | atributo
+ *   - tabela FATO:      versao | periodo | item | indicador | valor
+ *   - tabela DIMENSÃO:  item | secao | moeda | atributo | grupo
  *
- * Reutiliza as validações do importador da aba única (indicadores-core.ts);
+ * A dimensão é opcional para compatibilidade: sem ela, a fato deve trazer as
+ * propriedades (secao/moeda/atributo/grupo) em cada registro (formato antigo).
+ * Se as duas trouxerem propriedades, elas são conferidas e conflitos
+ * interrompem tudo.
+ *
+ * Reutiliza as validações do importador de Excel (indicadores-core.ts);
  * erros de formato apontam o registro problemático ("Registro N") e nada é
  * gravado fora da transação.
  *
@@ -17,12 +22,17 @@
  *     variável DATABRICKS_WAREHOUSE_ID).
  *
  * Uso:
- *   pnpm --filter @workspace/scripts run import-databricks <catalogo.schema.tabela>
- *   (ou defina DATABRICKS_INDICADORES_TABLE e chame sem argumento)
+ *   pnpm --filter @workspace/scripts run import-databricks <catalogo.schema.fato> [catalogo.schema.itens]
+ *   (ou defina DATABRICKS_INDICADORES_TABLE e DATABRICKS_ITENS_TABLE)
  */
 import {
   COLUNAS,
+  COLUNAS_FATO,
+  COLUNAS_ITENS,
   validarLinha,
+  validarItemDim,
+  ordenarDimensao,
+  mesclarDimensao,
   montarDados,
   gravarDados,
   fecharConexao,
@@ -31,6 +41,7 @@ import {
 } from "./indicadores-core.js";
 
 const rotulo: Rotulador = (n) => `Registro ${n}`;
+const rotuloItens: Rotulador = (n) => `Tabela de itens, registro ${n}`;
 
 // ---------------------------------------------------------------------------
 // Credenciais via conector Replit (databricks-m2m) — nunca em código/segredo solto
@@ -124,8 +135,9 @@ async function consultarTabela(
   }
   // A ordem das linhas define a ordem de exibição no painel — o contrato é
   // 1 linha da tabela = 1 linha da aba; preservamos a ordem natural retornada.
-  const executar = async (colunas: string[]) => {
-    const sql = `SELECT ${colunas.join(", ")} FROM ${validarNomeTabela(tabela)}`;
+  // SELECT *: as colunas obrigatórias são validadas depois, contra o contrato.
+  const executar = async () => {
+    const sql = `SELECT * FROM ${validarNomeTabela(tabela)}`;
     let stmt = await api(cred, "/api/2.0/sql/statements", {
       method: "POST",
       body: JSON.stringify({
@@ -156,17 +168,7 @@ async function consultarTabela(
     return stmt;
   };
 
-  // "grupo" é opcional na tabela: se a coluna não existir, consulta sem ela.
-  let stmt: Awaited<ReturnType<typeof executar>>;
-  try {
-    stmt = await executar([...COLUNAS, "moeda", "atributo", "grupo"]);
-  } catch (e) {
-    if (e instanceof Error && /grupo/i.test(e.message) && /UNRESOLVED_COLUMN|cannot be resolved|not found/i.test(e.message)) {
-      stmt = await executar([...COLUNAS, "moeda", "atributo"]);
-    } else {
-      throw e;
-    }
-  }
+  const stmt = await executar();
 
   const cols: string[] = (stmt.manifest?.schema?.columns ?? []).map((c: any) => c.name);
   const tipos: string[] = (stmt.manifest?.schema?.columns ?? []).map((c: any) =>
@@ -205,35 +207,65 @@ async function consultarTabela(
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const tabela = process.argv[2] ?? process.env.DATABRICKS_INDICADORES_TABLE;
-  if (!tabela) {
+  const tabelaFato = process.argv[2] ?? process.env.DATABRICKS_INDICADORES_TABLE;
+  const tabelaItens = process.argv[3] ?? process.env.DATABRICKS_ITENS_TABLE;
+  if (!tabelaFato) {
     throw new Error(
-      "Informe a tabela: pnpm --filter @workspace/scripts run import-databricks " +
-        "<catalogo.schema.tabela> (ou defina DATABRICKS_INDICADORES_TABLE)",
+      "Informe a tabela fato: pnpm --filter @workspace/scripts run import-databricks " +
+        "<catalogo.schema.fato> [catalogo.schema.itens] " +
+        "(ou defina DATABRICKS_INDICADORES_TABLE e DATABRICKS_ITENS_TABLE)",
     );
   }
 
   const cred = await obterCredenciais();
-  console.log(`Consultando ${tabela} em ${cred.host}...`);
-  const raw = await consultarTabela(cred, tabela);
-  if (raw.length === 0) throw new Error(`Tabela ${tabela} está vazia`);
+  console.log(`Consultando ${tabelaFato} em ${cred.host}...`);
+  const raw = await consultarTabela(cred, tabelaFato);
+  if (raw.length === 0) throw new Error(`Tabela ${tabelaFato} está vazia`);
 
   const presentes = Object.keys(raw[0]);
-  const faltando = COLUNAS.filter((c) => !presentes.includes(c));
+  // Com a tabela de itens, a fato só precisa das colunas enxutas; sem ela,
+  // as propriedades (secao etc.) devem vir na própria fato (formato antigo).
+  const obrigatorias = tabelaItens ? COLUNAS_FATO : COLUNAS;
+  const faltando = obrigatorias.filter((c) => !presentes.includes(c));
   if (faltando.length > 0) {
     throw new Error(
-      `Colunas obrigatórias ausentes em ${tabela}: ${faltando.join(", ")} ` +
+      `Colunas obrigatórias ausentes em ${tabelaFato}: ${faltando.join(", ")} ` +
         `(colunas presentes: ${presentes.join(", ")})`,
     );
   }
 
   // Registro N = N-ésima linha retornada pela tabela (1-based)
-  const registros = raw.map((r, i) => validarLinha(r, i + 1, rotulo));
-  const dados = montarDados(registros, rotulo);
+  let fato = raw.map((registro, i) => ({ registro, posicao: i + 1 }));
+  let dims;
+  if (tabelaItens) {
+    console.log(`Consultando ${tabelaItens} em ${cred.host}...`);
+    const rawItens = await consultarTabela(cred, tabelaItens);
+    if (rawItens.length === 0) throw new Error(`Tabela ${tabelaItens} está vazia`);
+    const presentesItens = Object.keys(rawItens[0]);
+    const faltandoItens = COLUNAS_ITENS.filter((c) => !presentesItens.includes(c));
+    if (faltandoItens.length > 0) {
+      throw new Error(
+        `Colunas obrigatórias ausentes em ${tabelaItens}: ${faltandoItens.join(", ")} ` +
+          `(colunas presentes: ${presentesItens.join(", ")})`,
+      );
+    }
+    // Tabelas SQL não têm ordem inerente: a coluna ordinal "sort_order" é
+    // OBRIGATÓRIA na dimensão do Databricks e fixa a ordem de exibição.
+    const ordenadas = ordenarDimensao(
+      rawItens.map((registro, i) => ({ registro, posicao: i + 1 })),
+      rotuloItens,
+      true,
+    );
+    dims = ordenadas.map(({ registro, posicao }) => validarItemDim(registro, posicao, rotuloItens));
+    fato = mesclarDimensao(fato, dims, rotulo, rotuloItens);
+  }
+
+  const registros = fato.map(({ registro, posicao }) => validarLinha(registro, posicao, rotulo));
+  const dados = montarDados(registros, rotulo, dims);
   console.log(resumo(registros.length, dados));
 
   await gravarDados(dados);
-  console.log(`Importado do Databricks: ${tabela} (${registros.length} registros)`);
+  console.log(`Importado do Databricks: ${tabelaFato} (${registros.length} registros)`);
   await fecharConexao();
 }
 

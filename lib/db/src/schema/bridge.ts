@@ -105,6 +105,47 @@ export const miscFactsTable = pgTable("misc_facts", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
+// ---------------------------------------------------------------------------
+// Modelo dimensional (espelha os modelos do SAP SAC / Databricks).
+// Fonte canônica dos indicadores: uma dimensão de itens com propriedades e uma
+// fato enxuta (cenário × item × indicador → valor). As cinco tabelas "largas"
+// acima são legadas: mantidas no schema para conversão de bancos existentes,
+// mas não recebem mais escrita — o painel reconstrói as formas largas na
+// leitura a partir de dim_items + indicator_facts.
+// ---------------------------------------------------------------------------
+
+// Dimensão de itens: chave = nome do item (único entre todas as seções);
+// propriedades que antes se repetiam em cada linha da fato.
+export const dimItemsTable = pgTable("dim_items", {
+  item: text("item").primaryKey(), // "Global" em Parametros
+  secao: text("secao").notNull(), // Parametros | Vendas | CustoFixo | Insumos | Ajustes
+  moeda: text("moeda"), // BRL | USD (Vendas e CustoFixo)
+  atributo: text("atributo"), // interno/externo (Vendas); consumo/outros/variacao_estoque (Ajustes)
+  grupo: text("grupo"), // grupo de exibição nas tabelas detalhadas
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+// Fato de indicadores: versão e período vêm do cenário MENSAL (scenarios.id =
+// fyNN_mMM_versao); item referencia a dimensão; indicador é a conta/medida.
+export const indicatorFactsTable = pgTable(
+  "indicator_facts",
+  {
+    id: serial("id").primaryKey(),
+    scenarioId: text("scenario_id").notNull(),
+    item: text("item")
+      .notNull()
+      .references(() => dimItemsTable.item, { onDelete: "cascade" }),
+    indicador: text("indicador").notNull(),
+    valor: doublePrecision("valor").notNull(),
+  },
+  (t) => [unique().on(t.scenarioId, t.item, t.indicador)],
+);
+
+export type DimItem = typeof dimItemsTable.$inferSelect;
+export type InsertDimItem = typeof dimItemsTable.$inferInsert;
+export type IndicatorFact = typeof indicatorFactsTable.$inferSelect;
+export type InsertIndicatorFact = typeof indicatorFactsTable.$inferInsert;
+
 // Waterfall driver catalog (order and Portuguese labels).
 export const BRIDGE_DRIVERS = [
   { key: "vol_mix", label: "Volume & Mix" },

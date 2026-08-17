@@ -18,15 +18,21 @@ import {
   fixedCostFactsTable,
   inputPriceFactsTable,
   miscFactsTable,
+  dimItemsTable,
+  indicatorFactsTable,
   type InsertScenario,
   type InsertScenarioParams,
   type InsertSalesFact,
   type InsertFixedCostFact,
   type InsertInputPriceFact,
   type InsertMiscFact,
+  type InsertDimItem,
+  type InsertIndicatorFact,
 } from "@workspace/db";
 
 export const COLUNAS = ["versao", "periodo", "secao", "item", "indicador", "valor"] as const;
+/** Colunas da fato no formato dimensional (propriedades vêm da dimensão). */
+export const COLUNAS_FATO = ["versao", "periodo", "item", "indicador", "valor"] as const;
 const VERSIONS = [
   "ACTUAL",
   "BUDGET",
@@ -66,6 +72,149 @@ function slug(s: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+/** Linha da dimensão de itens (aba "Itens" / tabela dim do Databricks). */
+export type ItemDim = {
+  linha: number;
+  item: string;
+  secao: string;
+  moeda: string | null;
+  atributo: string | null;
+  grupo: string | null;
+};
+
+export const COLUNAS_ITENS = ["item", "secao"] as const;
+
+/**
+ * Ordena as linhas cruas da dimensão pela coluna ordinal "sort_order".
+ * Tabelas SQL (Databricks) não têm ordem inerente — lá a coluna é
+ * OBRIGATÓRIA; no Excel a ordem das linhas da planilha já é determinística e
+ * a coluna é opcional (quando presente, prevalece sobre a ordem das linhas).
+ * Valores devem ser numéricos e únicos; qualquer violação interrompe tudo.
+ */
+export function ordenarDimensao(
+  rows: { registro: Record<string, unknown>; posicao: number }[],
+  rotulo: Rotulador,
+  obrigatoria: boolean,
+): { registro: Record<string, unknown>; posicao: number }[] {
+  const erro = fazErro(rotulo);
+  const bruto = (r: Record<string, unknown>): unknown => r["sort_order"];
+  const presentes = rows.filter(({ registro }) => {
+    const v = bruto(registro);
+    return v !== null && v !== undefined && String(v).trim() !== "";
+  });
+  if (presentes.length === 0) {
+    if (obrigatoria) {
+      throw new Error(
+        `Coluna "sort_order" ausente na dimensão: em tabelas SQL a ordem de ` +
+          `retorno não é determinística — inclua a coluna ordinal para fixar ` +
+          `a ordem de exibição dos itens`,
+      );
+    }
+    return rows;
+  }
+  const vistos = new Map<number, number>();
+  const chaves = rows.map(({ registro, posicao }) => {
+    const v = bruto(registro);
+    if (v === null || v === undefined || String(v).trim() === "") {
+      erro(posicao, `coluna "sort_order" vazia (presente nas demais linhas da dimensão)`);
+    }
+    const n = Number(v);
+    if (!Number.isFinite(n)) {
+      erro(posicao, `coluna "sort_order" não numérica: "${String(v)}"`);
+    }
+    const prev = vistos.get(n);
+    if (prev !== undefined) {
+      erro(posicao, `coluna "sort_order" duplicada (${n}, já usada em ${rotulo(prev)})`);
+    }
+    vistos.set(n, posicao);
+    return n;
+  });
+  return rows
+    .map((r, i) => ({ r, k: chaves[i] }))
+    .sort((a, b) => a.k - b.k)
+    .map(({ r }) => r);
+}
+
+/** Valida uma linha da dimensão de itens. */
+export function validarItemDim(
+  r: Record<string, unknown>,
+  posicao: number,
+  rotulo: Rotulador,
+): ItemDim {
+  const erro = fazErro(rotulo);
+  const texto = (col: string): string => {
+    const v = r[col];
+    if (typeof v !== "string" || v.trim() === "") erro(posicao, `coluna "${col}" vazia`);
+    return (v as string).trim();
+  };
+  const secao = texto("secao");
+  if (!INDICADORES[secao]) {
+    erro(posicao, `secao desconhecida: "${secao}" (esperado ${Object.keys(INDICADORES).join(", ")})`);
+  }
+  const opcional = (col: string): string | null =>
+    typeof r[col] === "string" && (r[col] as string).trim() !== ""
+      ? (r[col] as string).trim()
+      : null;
+  return {
+    linha: posicao,
+    item: texto("item"),
+    secao,
+    moeda: opcional("moeda"),
+    atributo: opcional("atributo"),
+    grupo: opcional("grupo"),
+  };
+}
+
+/**
+ * Mescla a dimensão de itens nas linhas da fato: cada linha da fato recebe as
+ * propriedades (secao/moeda/atributo/grupo) do seu item na dimensão.
+ * Se a fato trouxer essas colunas repetidas, elas são conferidas contra a
+ * dimensão e qualquer conflito interrompe a importação. Itens da fato fora
+ * da dimensão também interrompem.
+ */
+export function mesclarDimensao(
+  fato: { registro: Record<string, unknown>; posicao: number }[],
+  dims: ItemDim[],
+  rotuloFato: Rotulador,
+  rotuloDim: Rotulador,
+): { registro: Record<string, unknown>; posicao: number }[] {
+  const erroFato = fazErro(rotuloFato);
+  const erroDim = fazErro(rotuloDim);
+  const porItem = new Map<string, ItemDim>();
+  for (const d of dims) {
+    const prev = porItem.get(d.item);
+    if (prev) {
+      erroDim(d.linha, `item duplicado na dimensão: "${d.item}" (já apareceu em ${rotuloDim(prev.linha)})`);
+    }
+    porItem.set(d.item, d);
+  }
+  const PROPS = ["secao", "moeda", "atributo", "grupo"] as const;
+  return fato.map(({ registro, posicao }) => {
+    const item = typeof registro.item === "string" ? registro.item.trim() : "";
+    const dim = item === "" ? undefined : porItem.get(item);
+    if (!dim) {
+      erroFato(posicao, `item "${item}" não consta na dimensão de itens (aba/tabela Itens)`);
+    }
+    const merged: Record<string, unknown> = { ...registro };
+    for (const p of PROPS) {
+      const daFato =
+        typeof registro[p] === "string" && (registro[p] as string).trim() !== ""
+          ? (registro[p] as string).trim()
+          : null;
+      const daDim = dim![p];
+      if (daFato !== null && daFato !== daDim) {
+        erroFato(
+          posicao,
+          `propriedade "${p}" da fato ("${daFato}") conflita com a dimensão ` +
+            `("${daDim ?? ""}") para o item "${item}"`,
+        );
+      }
+      merged[p] = daDim ?? undefined;
+    }
+    return { registro: merged, posicao };
+  });
 }
 
 export type Registro = {
@@ -204,11 +353,95 @@ export type Dados = {
   fixed: InsertFixedCostFact[];
   inputs: InsertInputPriceFact[];
   misc: InsertMiscFact[];
+  // Modelo dimensional (fonte canônica gravada no banco).
+  dims: InsertDimItem[];
+  facts: InsertIndicatorFact[];
 };
+
+/**
+ * Deriva a dimensão de itens e a fato enxuta dos registros validados.
+ * No modelo dimensional o item é chave global: as propriedades devem ser
+ * idênticas em TODOS os cenários (versões e meses) — conflitos interrompem.
+ */
+function montarDimensional(
+  registros: Registro[],
+  scenarioIdDe: (r: Registro) => string,
+  rotulo: Rotulador,
+  // Dimensão vinda da aba/tabela "Itens": quando presente, ELA é a fonte da
+  // verdade — todos os seus membros são gravados na ordem da planilha,
+  // inclusive itens ainda sem nenhum valor na fato (dimensões legitimamente
+  // têm membros antes de os dados chegarem).
+  dimensao?: ItemDim[],
+): { dims: InsertDimItem[]; facts: InsertIndicatorFact[] } {
+  const erro = fazErro(rotulo);
+  const posDim = new Map<string, number>();
+  dimensao?.forEach((d, i) => {
+    if (!posDim.has(d.item)) posDim.set(d.item, i);
+  });
+  const dims = new Map<string, { reg: Registro; ordem: number }>();
+  const facts: InsertIndicatorFact[] = [];
+  for (const r of registros) {
+    if (dimensao && !posDim.has(r.item)) {
+      erro(r.linha, `item "${r.item}" não consta na dimensão (aba/tabela "Itens")`);
+    }
+    const prev = dims.get(r.item);
+    if (!prev) {
+      dims.set(r.item, { reg: r, ordem: posDim.get(r.item) ?? dims.size });
+    } else {
+      const p = prev.reg;
+      if (
+        p.secao !== r.secao ||
+        p.moeda !== r.moeda ||
+        p.atributo !== r.atributo ||
+        p.grupo !== r.grupo
+      ) {
+        erro(
+          r.linha,
+          `item "${r.item}" com propriedades inconsistentes entre linhas ` +
+            `(${rotulo(p.linha)}: ${p.secao}/${p.moeda ?? ""}/${p.atributo ?? ""}/${p.grupo ?? ""}; ` +
+            `esta: ${r.secao}/${r.moeda ?? ""}/${r.atributo ?? ""}/${r.grupo ?? ""}). ` +
+            `No modelo dimensional o item é chave única com as mesmas propriedades em todos os cenários`,
+        );
+      }
+    }
+    facts.push({
+      scenarioId: scenarioIdDe(r),
+      item: r.item,
+      indicador: r.indicador,
+      valor: r.valor,
+    });
+  }
+  // Com a dimensão presente, TODOS os seus membros são gravados na ordem da
+  // planilha — inclusive os que ainda não têm valores na fato.
+  const dimsOut: InsertDimItem[] = dimensao
+    ? dimensao.map((d, i) => ({
+        item: d.item,
+        secao: d.secao,
+        moeda: d.moeda,
+        atributo: d.atributo,
+        grupo: d.grupo,
+        sortOrder: i,
+      }))
+    : [...dims.values()].map(({ reg, ordem }) => ({
+        item: reg.item,
+        secao: reg.secao,
+        moeda: reg.moeda,
+        atributo: reg.atributo,
+        grupo: reg.grupo,
+        sortOrder: ordem,
+      }));
+  return { dims: dimsOut, facts };
+}
 
 /** Agrupa registros validados por cenário e monta os inserts, aplicando as
  *  validações de consistência (duplicados, obrigatórios, formatos de insumo). */
-export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
+export function montarDados(
+  registros: Registro[],
+  rotulo: Rotulador,
+  // Dimensão vinda da aba/tabela "Itens", quando presente: fonte da verdade
+  // para propriedades, ordem e conjunto de itens (membros sem fato inclusos).
+  dimensao?: ItemDim[],
+): Dados {
   const erro = fazErro(rotulo);
   type Grupo = {
     meta: NonNullable<ReturnType<typeof scenarioMeta>>;
@@ -420,12 +653,25 @@ export function montarDados(registros: Registro[], rotulo: Rotulador): Dados {
     else if (prev !== assinatura) conflito("insumo", i.item, prev, assinatura);
   }
 
-  return { scenarios, params, sales, fixed, inputs, misc };
+  const dimensional = montarDimensional(
+    registros,
+    (r) => scenarioMeta(r.versao, r.periodo, r.linha, erro)!.id,
+    rotulo,
+    dimensao,
+  );
+  return { scenarios, params, sales, fixed, inputs, misc, ...dimensional };
 }
 
-/** Substitui todos os dados do painel dentro de uma única transação. */
+/**
+ * Substitui todos os dados do painel dentro de uma única transação.
+ * Grava o modelo dimensional (dim_items + indicator_facts), a fonte canônica
+ * lida pelo painel. As tabelas largas legadas são apenas limpas — nenhum
+ * dado novo é gravado nelas.
+ */
 export async function gravarDados(d: Dados): Promise<void> {
   await db.transaction(async (tx) => {
+    await tx.delete(indicatorFactsTable);
+    await tx.delete(dimItemsTable);
     await tx.delete(miscFactsTable);
     await tx.delete(inputPriceFactsTable);
     await tx.delete(fixedCostFactsTable);
@@ -435,11 +681,8 @@ export async function gravarDados(d: Dados): Promise<void> {
     const chunk = <T,>(arr: T[], n: number) =>
       Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
     for (const c of chunk(d.scenarios, 500)) await tx.insert(scenariosTable).values(c);
-    for (const c of chunk(d.params, 500)) await tx.insert(scenarioParamsTable).values(c);
-    for (const c of chunk(d.sales, 1000)) await tx.insert(salesFactsTable).values(c);
-    for (const c of chunk(d.fixed, 1000)) await tx.insert(fixedCostFactsTable).values(c);
-    for (const c of chunk(d.inputs, 1000)) await tx.insert(inputPriceFactsTable).values(c);
-    for (const c of chunk(d.misc, 1000)) await tx.insert(miscFactsTable).values(c);
+    for (const c of chunk(d.dims, 500)) await tx.insert(dimItemsTable).values(c);
+    for (const c of chunk(d.facts, 1000)) await tx.insert(indicatorFactsTable).values(c);
   });
 }
 

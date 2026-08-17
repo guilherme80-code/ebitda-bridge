@@ -3,14 +3,12 @@ import { asc, inArray } from "drizzle-orm";
 import {
   db,
   scenariosTable,
-  scenarioParamsTable,
-  salesFactsTable,
-  fixedCostFactsTable,
-  inputPriceFactsTable,
-  miscFactsTable,
+  dimItemsTable,
+  indicatorFactsTable,
   BRIDGE_DRIVERS,
   type Scenario,
 } from "@workspace/db";
+import { buildRawScenarios, scenariosWithData } from "../lib/indicator-model";
 
 /** Alavancas a exibir para um bridge (barra "Estoque / Outros" é única). */
 function bridgeDriverList(
@@ -89,22 +87,22 @@ function firstStr(v: unknown): string | undefined {
 }
 
 export async function loadCatalog() {
-  const [scenarios, withParams, withSales] = await Promise.all([
+  const [scenarios, dims, facts] = await Promise.all([
     db.select().from(scenariosTable).orderBy(asc(scenariosTable.sortOrder)),
+    db.select().from(dimItemsTable),
     db
-      .select({ scenarioId: scenarioParamsTable.scenarioId })
-      .from(scenarioParamsTable),
-    db
-      .selectDistinct({ scenarioId: salesFactsTable.scenarioId })
-      .from(salesFactsTable),
+      .select({
+        scenarioId: indicatorFactsTable.scenarioId,
+        item: indicatorFactsTable.item,
+        indicador: indicatorFactsTable.indicador,
+        valor: indicatorFactsTable.valor,
+      })
+      .from(indicatorFactsTable),
   ]);
-  // Um cenário "tem dados" quando existem parâmetros E linhas de vendas —
-  // evita calcular um bridge enganoso a partir de importação parcial
+  // Um cenário "tem dados" quando existem parâmetros completos E linhas de
+  // vendas — evita calcular um bridge enganoso a partir de importação parcial
   // (o plug de estoque fecharia a ponte mesmo faltando dados brutos).
-  const salesIds = new Set(withSales.map((s) => s.scenarioId));
-  const withData = new Set(
-    withParams.map((p) => p.scenarioId).filter((id) => salesIds.has(id)),
-  );
+  const withData = scenariosWithData(buildRawScenarios(dims, facts));
 
   // A fonte é mensal; FY e trimestres são cenários DERIVADOS, consolidados
   // dos meses da versão. Um derivado só tem dados quando todos os seus meses
@@ -137,39 +135,14 @@ function defaultPair(scenarios: Scenario[], withData: Set<string>) {
 
 /** Carrega os dados brutos (vendas, custo fixo, insumos, misc) de um cenário. */
 async function loadRaw(ids: string[]): Promise<Map<string, RawScenarioData>> {
-  const [params, sales, fixed, inputs, misc] = await Promise.all([
+  const [dims, facts] = await Promise.all([
+    db.select().from(dimItemsTable),
     db
       .select()
-      .from(scenarioParamsTable)
-      .where(inArray(scenarioParamsTable.scenarioId, ids)),
-    db
-      .select()
-      .from(salesFactsTable)
-      .where(inArray(salesFactsTable.scenarioId, ids)),
-    db
-      .select()
-      .from(fixedCostFactsTable)
-      .where(inArray(fixedCostFactsTable.scenarioId, ids)),
-    db
-      .select()
-      .from(inputPriceFactsTable)
-      .where(inArray(inputPriceFactsTable.scenarioId, ids)),
-    db
-      .select()
-      .from(miscFactsTable)
-      .where(inArray(miscFactsTable.scenarioId, ids)),
+      .from(indicatorFactsTable)
+      .where(inArray(indicatorFactsTable.scenarioId, ids)),
   ]);
-  const out = new Map<string, RawScenarioData>();
-  for (const p of params) {
-    out.set(p.scenarioId, {
-      params: p,
-      sales: sales.filter((r) => r.scenarioId === p.scenarioId),
-      fixed: fixed.filter((r) => r.scenarioId === p.scenarioId),
-      inputs: inputs.filter((r) => r.scenarioId === p.scenarioId),
-      misc: misc.filter((r) => r.scenarioId === p.scenarioId),
-    });
-  }
-  return out;
+  return buildRawScenarios(dims, facts);
 }
 
 /**

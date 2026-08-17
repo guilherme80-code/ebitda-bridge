@@ -3,6 +3,8 @@ import {
   scenarioIdDe,
   validarLinhaValor,
   validarLinhaItem,
+  validarLinhaDim,
+  mesclarDimensaoLinhas,
   montarDadosMercado,
   type Rotulador,
 } from "./market-explanations-core";
@@ -183,5 +185,106 @@ describe("montarDadosMercado", () => {
         rotulo,
       ),
     ).toThrow(/Linha 3.*unidade inconsistente/);
+  });
+});
+
+describe("dimensão de linhas (aba Linhas)", () => {
+  const rotuloDim: Rotulador = (l) => `Dim ${l}`;
+  const dims = [
+    validarLinhaDim(
+      { explicacao: "Iron Ores", linha: "MB 62%", tipo: "preco", sentido: -1, unidade: "Price $/t" },
+      2,
+      rotuloDim,
+    ),
+    validarLinhaDim({ explicacao: "Iron Ores", linha: "Netback", tipo: "valor", sentido: 1 }, 3, rotuloDim),
+  ];
+  const fatoRow = (extra: Record<string, unknown>, pos = 2) => ({
+    registro: {
+      versao: "BUDGET",
+      periodo: "JAN26",
+      explicacao: "Iron Ores",
+      linha: "MB 62%",
+      valor: 96,
+      ...extra,
+    },
+    posicao: pos,
+  });
+
+  it("aplica padrões da dimensão (tipo preco, sentido -1) e propaga propriedades", () => {
+    expect(dims[0]).toMatchObject({ tipo: "price", sentido: -1, unidade: "Price $/t" });
+    const [m] = mesclarDimensaoLinhas([fatoRow({})], dims, rotulo, rotuloDim);
+    expect(m.registro.explicacao).toBe("Iron Ores");
+    const r = validarLinhaValor(m.registro, m.posicao, rotulo);
+    expect(r.tipo).toBe("price");
+    expect(r.sentido).toBe(-1);
+    expect(r.unidade).toBe("Price $/t");
+  });
+
+  it("rejeita linha da fato fora da dimensão e conflitos de propriedade", () => {
+    expect(() => mesclarDimensaoLinhas([fatoRow({ linha: "X" })], dims, rotulo, rotuloDim)).toThrow(
+      /Linha 2.*"X" da explicação "Iron Ores" não consta na\s+dimensão/,
+    );
+    expect(() =>
+      mesclarDimensaoLinhas([fatoRow({ tipo: "valor" })], dims, rotulo, rotuloDim),
+    ).toThrow(/Linha 2.*tipo da fato.*conflita/);
+    expect(() =>
+      mesclarDimensaoLinhas([fatoRow({ sentido: 1 })], dims, rotulo, rotuloDim),
+    ).toThrow(/Linha 2.*sentido da fato \(1\) conflita/);
+    expect(() =>
+      mesclarDimensaoLinhas([fatoRow({ explicacao: "Coking Coal" })], dims, rotulo, rotuloDim),
+    ).toThrow(/Linha 2.*"MB 62%" da explicação "Coking Coal" não consta na\s+dimensão/);
+    expect(() =>
+      mesclarDimensaoLinhas([fatoRow({ explicacao: "" })], dims, rotulo, rotuloDim),
+    ).toThrow(/Linha 2.*coluna "explicacao" vazia/);
+  });
+
+  it("rejeita o par explicação + linha duplicado na dimensão", () => {
+    const dup = [
+      ...dims,
+      validarLinhaDim({ explicacao: "Iron Ores", linha: "MB 62%" }, 9, rotuloDim),
+    ];
+    expect(() => mesclarDimensaoLinhas([fatoRow({})], dup, rotulo, rotuloDim)).toThrow(
+      /Dim 9.*linha duplicada na dimensão: "MB 62%" da explicação\s+"Iron Ores"/,
+    );
+  });
+
+  it("aceita o mesmo rótulo de linha em explicações diferentes (chave composta)", () => {
+    const compartilhado = [
+      ...dims,
+      validarLinhaDim(
+        { explicacao: "Coking Coal", linha: "MB 62%", tipo: "preco", sentido: -1, unidade: "Price $/t" },
+        9,
+        rotuloDim,
+      ),
+    ];
+    const fato = mesclarDimensaoLinhas(
+      [fatoRow({}, 2), fatoRow({ explicacao: "Coking Coal", valor: 210 }, 3), fatoRow({ linha: "Netback", valor: 5 }, 4)],
+      compartilhado,
+      rotulo,
+      rotuloDim,
+    );
+    const valores = fato.map(({ registro, posicao }) => validarLinhaValor(registro, posicao, rotulo));
+    const inds = montarDadosMercado(valores, [], rotulo, rotulo, compartilhado, rotuloDim);
+    expect(inds.map((i) => i.title)).toEqual(["Iron Ores", "Coking Coal"]);
+    expect(inds[0].lines.map((l) => l.label)).toEqual(["MB 62%", "Netback"]);
+    expect(inds[1].lines.map((l) => l.label)).toEqual(["MB 62%"]);
+    expect(inds[0].lines[0].values).toHaveLength(1);
+    expect(inds[1].lines[0].values).toHaveLength(1);
+  });
+
+  it("montarDadosMercado com dims ordena pela dimensão e exige valor em toda linha", () => {
+    const fato = mesclarDimensaoLinhas(
+      [fatoRow({ linha: "Netback", valor: 5 }, 2), fatoRow({}, 3)],
+      dims,
+      rotulo,
+      rotuloDim,
+    );
+    const valores = fato.map(({ registro, posicao }) => validarLinhaValor(registro, posicao, rotulo));
+    const [ind] = montarDadosMercado(valores, [], rotulo, rotulo, dims, rotuloDim);
+    expect(ind.lines.map((l) => l.label)).toEqual(["MB 62%", "Netback"]);
+
+    expect(() =>
+      montarDadosMercado([valores[1]], [], rotulo, rotulo, dims, rotuloDim),
+    ).toThrow(/Dim 3.*"Netback".*não tem nenhum\s+valor na fato/);
   });
 });

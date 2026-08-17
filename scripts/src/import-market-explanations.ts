@@ -18,9 +18,13 @@ import * as fs from "node:fs";
 import * as XLSX from "xlsx";
 import {
   COLUNAS_EXPLICACOES,
+  COLUNAS_EXPLICACOES_FATO,
+  COLUNAS_LINHAS,
   COLUNAS_ITENS,
   validarLinhaValor,
   validarLinhaItem,
+  validarLinhaDim,
+  mesclarDimensaoLinhas,
   montarDadosMercado,
   gravarDadosMercado,
   fecharConexao,
@@ -33,6 +37,7 @@ const DEFAULT_PATH = path.resolve(
   "../../exports/Explicacoes_Mercado_Bridge_EBITDA.xlsx",
 );
 const SHEET_EXPLICACOES = "Explicacoes";
+const SHEET_LINHAS = "Linhas";
 const SHEET_ITENS = "Itens";
 
 function lerAba(
@@ -73,17 +78,42 @@ async function main() {
   const wb = XLSX.read(fs.readFileSync(filePath));
   const nome = path.basename(filePath);
 
-  const rawExp = lerAba(wb, SHEET_EXPLICACOES, COLUNAS_EXPLICACOES, nome);
+  // Aba "Linhas" (dimensão) — opcional para compatibilidade com o formato
+  // antigo (propriedades repetidas em cada linha da aba "Explicacoes").
+  const temDim = Boolean(wb.Sheets[SHEET_LINHAS]);
+  const rawExp = lerAba(
+    wb,
+    SHEET_EXPLICACOES,
+    temDim ? COLUNAS_EXPLICACOES_FATO : COLUNAS_EXPLICACOES,
+    nome,
+  );
   const rawItens = lerAba(wb, SHEET_ITENS, COLUNAS_ITENS, nome, true);
 
   const rotuloExp: Rotulador = (l) => `Aba "${SHEET_EXPLICACOES}", linha ${l}`;
+  const rotuloLinhas: Rotulador = (l) => `Aba "${SHEET_LINHAS}", linha ${l}`;
   const rotuloItem: Rotulador = (l) => `Aba "${SHEET_ITENS}", linha ${l}`;
 
   // linha na planilha: +1 do cabeçalho, +1 para 1-based
-  const explicacoes = rawExp.map((r, i) => validarLinhaValor(r, i + 2, rotuloExp));
+  let fato = rawExp.map((registro, i) => ({ registro, posicao: i + 2 }));
+  let dims;
+  if (temDim) {
+    const rawLinhas = lerAba(wb, SHEET_LINHAS, COLUNAS_LINHAS, nome);
+    dims = rawLinhas.map((r, i) => validarLinhaDim(r, i + 2, rotuloLinhas));
+    fato = mesclarDimensaoLinhas(fato, dims, rotuloExp, rotuloLinhas);
+  }
+  const explicacoes = fato.map(({ registro, posicao }) =>
+    validarLinhaValor(registro, posicao, rotuloExp),
+  );
   const itens = rawItens.map((r, i) => validarLinhaItem(r, i + 2, rotuloItem));
 
-  const dados = montarDadosMercado(explicacoes, itens, rotuloExp, rotuloItem);
+  const dados = montarDadosMercado(
+    explicacoes,
+    itens,
+    rotuloExp,
+    rotuloItem,
+    dims,
+    rotuloLinhas,
+  );
   console.log(resumoMercado(dados));
 
   await gravarDadosMercado(dados);

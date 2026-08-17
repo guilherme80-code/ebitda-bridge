@@ -19,7 +19,10 @@ if (Number.isNaN(port) || port <= 0) {
 try {
   await seedIfEmpty();
 } catch (err) {
-  logger.error({ err }, "Falha ao importar dados iniciais do bridge");
+  // Sem os dados (ou sem a conversão para o modelo dimensional) toda leitura
+  // do bridge falharia — melhor não subir do que servir erros.
+  logger.error({ err }, "Falha ao importar/converter dados iniciais do bridge — abortando");
+  process.exit(1);
 }
 
 app.listen(port, (err) => {

@@ -1,11 +1,13 @@
 /**
  * Exporta as EXPLICAÇÕES (indicadores de mercado) do banco para o Excel no
- * formato por VERSÃO — o mesmo contrato aceito por import-market-explanations:
- *   - "Explicacoes": versao | periodo | explicacao | linha | valor | kt |
- *     tipo ("preco" ou "valor") | sentido (1 ou -1) | unidade
+ * formato DIMENSIONAL (modelo SAC) — o mesmo contrato aceito por
+ * import-market-explanations:
+ *   - "Linhas" (dimensão): explicacao | linha | tipo ("preco" ou "valor") |
+ *     sentido (1 ou -1) | unidade — chave composta explicacao + linha
+ *   - "Explicacoes" (fato): versao | periodo | explicacao | linha | valor | kt
  *   - "Itens": explicacao | item
  *
- * Uma versão e um período (mensal) por linha; o par origem × destino é
+ * Uma versão e um período (mensal) por linha da fato; o par origem × destino é
  * escolhido no app e o cálculo é feito dinamicamente na seleção.
  *
  * Uso: pnpm --filter @workspace/scripts run export-market-explanations [caminho.xlsx]
@@ -62,15 +64,38 @@ async function main() {
     linha: string;
     valor: number;
     kt: number | null;
+  };
+  type LinhaDim = {
+    explicacao: string;
+    linha: string;
     tipo: string;
     sentido: number;
     unidade: string;
   };
+  const linhasDim: LinhaDim[] = [];
   const linhasExp: LinhaExp[] = [];
   const linhasItens: { explicacao: string; item: string }[] = [];
+  // Chave da dimensão é COMPOSTA (explicacao + linha): o mesmo rótulo pode
+  // existir em explicações diferentes.
+  const paresVistos = new Set<string>();
 
   for (const ind of indicators) {
     for (const line of linesByIndicator.get(ind.id) ?? []) {
+      const par = `${ind.title}\u0000${line.label}`;
+      if (paresVistos.has(par)) {
+        throw new Error(
+          `Linha "${line.label}" duplicada dentro da explicação "${ind.title}" ` +
+            `— corrija o dado antes de exportar`,
+        );
+      }
+      paresVistos.add(par);
+      linhasDim.push({
+        explicacao: ind.title,
+        linha: line.label,
+        tipo: line.kind === "amount" ? "valor" : "preco",
+        sentido: line.direction,
+        unidade: ind.unitLabel,
+      });
       const vals = [...(valuesByLine.get(line.id) ?? [])].sort((a, b) =>
         a.scenarioId.localeCompare(b.scenarioId),
       );
@@ -96,9 +121,6 @@ async function main() {
           linha: line.label,
           valor: v.value,
           kt: v.volumeKt,
-          tipo: line.kind === "amount" ? "valor" : "preco",
-          sentido: line.direction,
-          unidade: ind.unitLabel,
         });
       }
     }
@@ -113,8 +135,15 @@ async function main() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
     wb,
+    XLSX.utils.json_to_sheet(linhasDim, {
+      header: ["explicacao", "linha", "tipo", "sentido", "unidade"],
+    }),
+    "Linhas",
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
     XLSX.utils.json_to_sheet(linhasExp, {
-      header: ["versao", "periodo", "explicacao", "linha", "valor", "kt", "tipo", "sentido", "unidade"],
+      header: ["versao", "periodo", "explicacao", "linha", "valor", "kt"],
     }),
     "Explicacoes",
   );
@@ -126,7 +155,8 @@ async function main() {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer);
   console.log(
-    `Exportado: ${linhasExp.length} valores (versão × mês), ${linhasItens.length} itens → ${out}`,
+    `Exportado: ${linhasDim.length} linhas (dimensão), ${linhasExp.length} valores ` +
+      `(versão × mês), ${linhasItens.length} itens → ${out}`,
   );
   await pool.end();
 }
