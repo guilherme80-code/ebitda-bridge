@@ -185,6 +185,29 @@ function parseSentido(
   return n as 1 | -1;
 }
 
+/**
+ * Como `texto`, mas proíbe o caractere "|": no SAC o ID técnico do membro da
+ * dimensão Linha é a chave composta serializada `<explicacao>|<linha>`, e um
+ * "|" dentro dos componentes tornaria a serialização ambígua (ex.: "A|B"+"C"
+ * colidiria com "A"+"B|C").
+ */
+function textoSemPipe(
+  r: Record<string, unknown>,
+  coluna: string,
+  posicao: number,
+  erro: (posicao: number, msg: string) => never,
+): string {
+  const v = texto(r, coluna, posicao, erro);
+  if (v.includes("|")) {
+    erro(
+      posicao,
+      `coluna "${coluna}" não pode conter "|" (reservado como separador da ` +
+        `chave composta explicação|linha no SAC): "${v}"`,
+    );
+  }
+  return v;
+}
+
 /** Linha da dimensão (aba "Linhas"): propriedades de cada linha de explicação. */
 export type LinhaDim = {
   linha: number; // posição na fonte
@@ -203,8 +226,8 @@ export function validarLinhaDim(
   const erro = fazErro(rotulo);
   return {
     linha: posicao,
-    explicacao: texto(r, "explicacao", posicao, erro),
-    rotuloLinha: texto(r, "linha", posicao, erro),
+    explicacao: textoSemPipe(r, "explicacao", posicao, erro),
+    rotuloLinha: textoSemPipe(r, "linha", posicao, erro),
     tipo: parseTipo(r.tipo, posicao, erro) ?? "price",
     sentido: parseSentido(r, posicao, erro) ?? -1,
     unidade:
@@ -347,9 +370,9 @@ export function validarLinhaValor(
   return {
     linha,
     scenarioId,
-    explicacao: texto(r, "explicacao", linha, erro),
+    explicacao: textoSemPipe(r, "explicacao", linha, erro),
     unidade,
-    rotuloLinha: texto(r, "linha", linha, erro),
+    rotuloLinha: textoSemPipe(r, "linha", linha, erro),
     tipo,
     sentido,
     valor: valor as number,
@@ -366,7 +389,7 @@ export function validarLinhaItem(
   const linha = posicao;
   return {
     linha,
-    explicacao: texto(r, "explicacao", linha, erro),
+    explicacao: textoSemPipe(r, "explicacao", linha, erro),
     item: texto(r, "item", linha, erro),
   };
 }

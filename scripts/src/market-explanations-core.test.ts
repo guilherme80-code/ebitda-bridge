@@ -248,6 +248,15 @@ describe("dimensão de linhas (aba Linhas)", () => {
     );
   });
 
+  it('rejeita "|" em explicação e em linha (reservado para a chave composta no SAC)', () => {
+    expect(() => validarLinhaDim({ explicacao: "Iron|Ores", linha: "MB 62%" }, 9, rotuloDim)).toThrow(
+      /"explicacao" não pode conter "\|"/,
+    );
+    expect(() => validarLinhaDim({ explicacao: "Iron Ores", linha: "MB|62%" }, 9, rotuloDim)).toThrow(
+      /"linha" não pode conter "\|"/,
+    );
+  });
+
   it("aceita o mesmo rótulo de linha em explicações diferentes (chave composta)", () => {
     const compartilhado = [
       ...dims,
