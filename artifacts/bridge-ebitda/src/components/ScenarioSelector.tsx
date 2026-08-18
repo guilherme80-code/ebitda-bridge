@@ -1,6 +1,7 @@
 import { ArrowRight } from 'lucide-react';
 import type { Scenario } from '@workspace/api-client-react';
 import { cn } from '../lib/utils';
+import { scenarioVersions } from '../lib/scenario-versions';
 
 const KIND_LABEL: Record<string, string> = {
   year: 'Year',
@@ -20,7 +21,7 @@ function ScenarioPicker({
   onSelect: (id: string) => void;
 }) {
   const selected = scenarios.find((s) => s.id === selectedId);
-  const versions = [...new Set(scenarios.map((s) => s.version))];
+  const versions = scenarioVersions(scenarios);
 
   // Períodos únicos na ordem do catálogo, agrupados por tipo (ano/trimestre/mês).
   const periods: { period: string; periodKind: string }[] = [];
