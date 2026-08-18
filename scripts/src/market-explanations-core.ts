@@ -25,7 +25,7 @@ import {
   marketIndicatorValuesTable,
   marketIndicatorItemsTable,
 } from "@workspace/db";
-import { parsePeriodoMensal } from "./indicadores-core.js";
+import { normalizarVersao, parsePeriodoMensal, VERSIONS } from "./indicadores-core.js";
 
 export const COLUNAS_EXPLICACOES = [
   "versao",
@@ -46,17 +46,6 @@ export const COLUNAS_EXPLICACOES_FATO = [
 export const COLUNAS_LINHAS = ["explicacao", "linha"] as const;
 export const COLUNAS_ITENS = ["explicacao", "item"] as const;
 
-const VERSIONS = [
-  "ACTUAL",
-  "BUDGET",
-  "MRF1",
-  "MRF2",
-  "MRF3",
-  "MRF4",
-  "MRF5",
-  "MRF6",
-  "MRF7",
-];
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 export type Rotulador = (posicao: number) => string;
@@ -75,7 +64,7 @@ export function scenarioIdDe(
   rotulo: Rotulador,
 ): string {
   const erro = fazErro(rotulo);
-  const canonica = versao.trim().toUpperCase().replace(/^MRF0(\d)$/, "MRF$1");
+  const canonica = normalizarVersao(versao);
   if (!VERSIONS.includes(canonica)) {
     erro(linha, `versao desconhecida: "${versao}" (esperado ${VERSIONS.join(", ")})`);
   }

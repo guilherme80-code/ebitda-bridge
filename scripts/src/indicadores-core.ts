@@ -28,18 +28,22 @@ import {
 export const COLUNAS = ["versao", "periodo", "secao", "item", "indicador", "valor"] as const;
 /** Colunas da fato no formato dimensional (propriedades vêm da dimensão). */
 export const COLUNAS_FATO = ["versao", "periodo", "item", "indicador", "valor"] as const;
-const VERSIONS = [
+export const VERSIONS = [
   "ACTUAL",
   "BUDGET",
-  "MRF1",
-  "MRF2",
-  "MRF3",
-  "MRF4",
-  "MRF5",
-  "MRF6",
-  "MRF7",
+  ...Array.from({ length: 12 }, (_, i) => `MRF${i + 1}`),
 ];
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+/** Normaliza versões do SAC/Databricks para a convenção do painel. */
+export function normalizarVersao(versao: string): string {
+  const canonica = versao.trim().toUpperCase();
+  const mrf = canonica.match(/^MRF(?:0([1-9])|([1-9]|1[0-2]))$/);
+  if (mrf) return `MRF${Number(mrf[1] ?? mrf[2])}`;
+  return canonica;
+}
+
+const SCENARIO_YEAR_SORT_BASE = 100_000_000;
 
 /**
  * Interpreta um período mensal nos dois formatos aceitos:
@@ -284,8 +288,8 @@ function scenarioMeta(
   linha: number,
   erro: ReturnType<typeof fazErro>,
 ) {
-  // MRF01..MRF09 são normalizados para MRF1..MRF9 (mesma convenção de ids).
-  const canonica = versao.replace(/^MRF0(\d)$/, "MRF$1");
+  // MRF01..MRF09 são normalizados para MRF1..MRF9; MRF10..MRF12 permanecem.
+  const canonica = normalizarVersao(versao);
   const vi = VERSIONS.indexOf(canonica);
   if (vi < 0) erro(linha, `versao desconhecida: "${versao}" (esperado ${VERSIONS.join(", ")})`);
   const vSlug = canonica.toLowerCase();
@@ -307,7 +311,14 @@ function scenarioMeta(
       periodKind: "month",
       label: `${rotuloMes} ${vLabel}`,
       versao: canonica,
-      sortOrder: 10000 + (vi + 1) * 100 + pm.mi,
+      // O ano entra na ordenação para que cargas de anos diferentes não
+      // empatem no catálogo do painel.
+      sortOrder:
+        SCENARIO_YEAR_SORT_BASE +
+        Number(pm.yy) * 1_000_000 +
+        200_000 +
+        (vi + 1) * 100 +
+        pm.mi,
     };
   }
   erro(linha, `periodo desconhecido: "${periodo}" (esperado YYYYMM, ex.: 202601; JAN26..DEC26 também é aceito)`);

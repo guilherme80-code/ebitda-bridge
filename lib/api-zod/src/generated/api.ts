@@ -18,19 +18,19 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Returns all versions (BUDGET, MRF1..MRF7) with a flag indicating whether imported data exists, plus the default comparison pair. Any two versions with data can be compared; the bridge is computed on the fly.
+ * Returns all versions (ACTUAL, BUDGET, MRF1..MRF12) with a flag indicating whether imported data exists, plus the default comparison pair. Any two versions with data can be compared; the bridge is computed on the fly.
  * @summary List available scenarios (version + period)
  */
 export const ListScenariosResponse = zod.object({
   "scenarios": zod.array(zod.object({
   "id": zod.string().describe('Stable identifier (e.g. fy26_budget).'),
-  "version": zod.string().describe('Version name (e.g. Budget, MRF7).'),
+  "version": zod.string().describe('Version name (e.g. Budget, MRF12).'),
   "period": zod.string().describe('Period (e.g. FY26, FY26 Q1, FY26 Jan).'),
   "periodKind": zod.enum(['year', 'quarter', 'month']).describe('Granularity of the period. Only scenarios of the same kind can be compared (year vs year, quarter vs quarter, month vs month).'),
   "label": zod.string().describe('Display label in Portuguese.'),
   "hasData": zod.boolean().describe('Whether imported data exists for this version. Versions without data cannot be compared yet.'),
   "missingMonths": zod.array(zod.string()).optional().describe('For derived year\/quarter scenarios without data, the month periods (e.g. FEB26) still missing before the period can be consolidated. Omitted when the scenario has data.')
-}).describe('A scenario is a combination of version (e.g. Budget, MRF7) and period (e.g. FY26).')),
+}).describe('A scenario is a combination of version (e.g. Budget, MRF12) and period (e.g. FY26 or another received year).')),
   "defaultPair": zod.object({
   "sourceId": zod.string(),
   "targetId": zod.string()

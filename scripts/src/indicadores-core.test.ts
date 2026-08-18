@@ -165,6 +165,30 @@ describe("mesclarDimensao", () => {
     expect(c.periodo).toBe("DEC26");
   });
 
+  it("aceita MRF1 até MRF12 e qualquer ano válido recebido do Databricks", () => {
+    const indicadores = [
+      "cambio_brl_usd",
+      "cambio_custo_fixo_brl_usd",
+      "aco_bruto_kt",
+      "ebitda_kusd",
+      "participacao_custo_interno",
+    ];
+    const registros = (versao: string, periodo: string) =>
+      indicadores.map((indicador, i) =>
+        validarLinha(
+          { versao, periodo, item: "Global", indicador, valor: i + 1, secao: "Parametros" },
+          i + 5,
+          rotuloFato,
+        ),
+      );
+    const dados = montarDados(
+      [...registros("MRF12", "203701"), ...registros("MRF01", "203712")],
+      rotuloFato,
+    );
+    expect(dados.scenarios.map((s) => s.id)).toEqual(["fy37_m01_mrf12", "fy37_m12_mrf1"]);
+    expect(dados.scenarios.map((s) => s.version)).toEqual(["MRF12", "MRF1"]);
+  });
+
   it("rejeita YYYYMM com mês ou ano inválido", () => {
     const linha = (periodo: unknown) => ({
       versao: "BUDGET", periodo, item: "Global", indicador: "ebitda_kusd", valor: 1, secao: "Parametros",

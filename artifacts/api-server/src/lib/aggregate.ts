@@ -27,10 +27,42 @@ const QUARTER_MONTHS: Record<number, number[]> = {
 };
 
 const MONTH_ID = /^fy(\d{2})_m(\d{2})_(.+)$/;
+const SCENARIO_ID = /^fy(\d{2})_(fy|q([1-4])|m(\d{2}))_(.+)$/;
+const SCENARIO_YEAR_SORT_BASE = 100_000_000;
 
 export interface DerivedScenario extends Scenario {
   /** ids dos cenários mensais que compõem o derivado, em ordem (todos os esperados) */
   monthIds: string[];
+}
+
+function versionOrderIndex(version: string): number {
+  const v = version.trim().toUpperCase();
+  if (v === "ACTUAL") return 0;
+  if (v === "BUDGET") return 1;
+  const mrf = v.match(/^MRF([1-9]|1[0-2])$/);
+  return mrf ? Number(mrf[1]) + 1 : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Ordena cenários por ano, granularidade e versão. O banco pode conter
+ * sort_order produzido por uma versão antiga do importador, então o catálogo
+ * não depende somente dessa coluna.
+ */
+export function compareScenarios(a: Scenario, b: Scenario): number {
+  const pa = a.id.match(SCENARIO_ID);
+  const pb = b.id.match(SCENARIO_ID);
+  if (!pa || !pb) {
+    return a.sortOrder - b.sortOrder || a.id.localeCompare(b.id);
+  }
+  const year = Number(pa[1]) - Number(pb[1]);
+  if (year !== 0) return year;
+  const kindOrder = (kind: string) => (kind === "fy" ? 0 : kind.startsWith("q") ? 1 : 2);
+  const kind = kindOrder(pa[2]) - kindOrder(pb[2]);
+  if (kind !== 0) return kind;
+  const version = versionOrderIndex(pa[5]) - versionOrderIndex(pb[5]);
+  if (version !== 0) return version;
+  const period = Number(pa[3] ?? pa[4] ?? 0) - Number(pb[3] ?? pb[4] ?? 0);
+  return period || a.id.localeCompare(b.id);
 }
 
 const MONTH_NAMES = [
@@ -76,8 +108,8 @@ export function deriveScenarios(monthly: Scenario[]): DerivedScenario[] {
   for (const b of buckets.values()) {
     const anyMonth = [...b.byMonth.values()][0];
     // vi reconstruído da ordenação mensal (10000 + (vi+1)*100 + mês-1)
-    const mi = parseMonthId(anyMonth.id)!.month - 1;
-    const vi = Math.round((anyMonth.sortOrder - 10000 - mi) / 100) - 1;
+    const vi = versionOrderIndex(b.version);
+    const yearBase = SCENARIO_YEAR_SORT_BASE + Number(b.yy) * 1_000_000;
     const vLabel = anyMonth.label.replace(/^\S+\s*/, ""); // "JAN26 Budget" → "Budget"
 
     // Emite o derivado mesmo com meses faltando — quem decide se ele "tem
@@ -91,7 +123,7 @@ export function deriveScenarios(monthly: Scenario[]): DerivedScenario[] {
       period: `FY${b.yy}`,
       periodKind: "year",
       label: `FY${b.yy} ${vLabel}`,
-      sortOrder: vi,
+      sortOrder: yearBase + vi * 1000,
       monthIds: Array.from({ length: 12 }, (_, i) => monthId(i + 1)),
     });
     for (const [q, months] of Object.entries(QUARTER_MONTHS)) {
@@ -101,12 +133,12 @@ export function deriveScenarios(monthly: Scenario[]): DerivedScenario[] {
         period: `Q${q}${b.yy}`,
         periodKind: "quarter",
         label: `Q${q}${b.yy} ${vLabel}`,
-        sortOrder: 1000 + (vi + 1) * 10 + (Number(q) - 1),
+        sortOrder: yearBase + 100_000 + vi * 10 + (Number(q) - 1),
         monthIds: months.map(monthId),
       });
     }
   }
-  return out.sort((a, b) => a.sortOrder - b.sortOrder);
+  return out.sort(compareScenarios);
 }
 
 /** Média ponderada; cai na média simples quando a soma dos pesos é ~0. */

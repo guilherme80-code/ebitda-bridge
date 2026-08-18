@@ -1,6 +1,6 @@
 # Painel Bridge de EBITDA
 
-Painel executivo que explica a variação de EBITDA (FY26 Budget 632,0 → FY26 MRF7 747,7 MUSD) em um gráfico de cascata interativo com drill-down por componente. Interface em português (pt-BR).
+Painel executivo que explica a variação de EBITDA (por exemplo, FY26 Budget 632,0 → FY26 MRF7 747,7 MUSD) em um gráfico de cascata interativo com drill-down por componente. As cargas aceitam Actual, Budget e MRF1–MRF12 para qualquer ano no contrato YYYYMM. Interface em português (pt-BR).
 
 ## Run & Operate
 

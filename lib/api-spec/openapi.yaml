@@ -31,7 +31,7 @@ paths:
       operationId: listScenarios
       tags: [bridge]
       summary: List available scenarios (version + period)
-      description: Returns all versions (BUDGET, MRF1..MRF7) with a flag indicating whether imported data exists, plus the default comparison pair. Any two versions with data can be compared; the bridge is computed on the fly.
+      description: Returns all versions (ACTUAL, BUDGET, MRF1..MRF12) with a flag indicating whether imported data exists, plus the default comparison pair. Any two versions with data can be compared; the bridge is computed on the fly.
       responses:
         "200":
           description: Scenario catalog
@@ -392,14 +392,14 @@ components:
       required: [sourceId, targetId, valueMusd, text]
     Scenario:
       type: object
-      description: A scenario is a combination of version (e.g. Budget, MRF7) and period (e.g. FY26).
+      description: A scenario is a combination of version (e.g. Budget, MRF12) and period (e.g. FY26 or another received year).
       properties:
         id:
           type: string
           description: Stable identifier (e.g. fy26_budget).
         version:
           type: string
-          description: Version name (e.g. Budget, MRF7).
+          description: Version name (e.g. Budget, MRF12).
         period:
           type: string
           description: Period (e.g. FY26, FY26 Q1, FY26 Jan).

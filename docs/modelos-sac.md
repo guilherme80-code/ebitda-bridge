@@ -13,10 +13,11 @@ ponta, com a estrutura REAL dos modelos criados no SAC — `FOUND_EBITDA` e
 
 ## Convenções comuns aos dois modelos
 
-- **Granularidade: versão × mês.** Versões: `ACTUAL`, `BUDGET`, `MRF1`…`MRF7`
-  (pendência: o SAC já tem `MRF08_2026`, mas o painel ainda não aceita MRF8+ —
-  deixe versões além de MRF7 fora da extração; ver
-  `docs/fluxo-sac-databricks-app.md`).
+- **Granularidade: versão × mês.** Versões: `ACTUAL`, `BUDGET`,
+  `MRF1`…`MRF12`; os IDs com zero à esquerda `MRF01`…`MRF09` são
+  normalizados. O ano não é fixado em FY26: use o `YYYYMM` recebido do
+  Databricks dentro do intervalo aceito (2000–2099). Ver
+  `docs/fluxo-sac-databricks-app.md`.
   Períodos: somente meses, no padrão SAP SAC **`YYYYMM`** (ex.: `202601` =
   jan/2026). O formato antigo `JAN26`…`DEC26` continua aceito na importação.
   NÃO carregue FY nem trimestres — o painel deriva FY/Q somando meses (taxas
@@ -39,7 +40,7 @@ ponta, com a estrutura REAL dos modelos criados no SAC — `FOUND_EBITDA` e
 
 | Elemento SAC | Conteúdo |
 |---|---|
-| Dimensão **Versão** (category/version) | `ACTUAL`, `BUDGET`, `MRF1`…`MRF7` |
+| Dimensão **Versão** (category/version) | `ACTUAL`, `BUDGET`, `MRF1`…`MRF12` |
 | Dimensão **Tempo** | Mensal, `YYYYMM` (ex.: `202601`…`202612`) |
 | Dimensão **Item** (genérica, com propriedades) | Um membro por item; ver propriedades abaixo |
 | Dimensão de **conta** (medida) **Indicador** | Contas listadas abaixo, por seção |
@@ -118,7 +119,7 @@ com valores por versão × mês, e uma lista de **itens do bridge** vinculados.
 
 | Elemento SAC | Conteúdo |
 |---|---|
-| Dimensão **Versão** | `ACTUAL`, `BUDGET`, `MRF1`…`MRF7` |
+| Dimensão **Versão** | `ACTUAL`, `BUDGET`, `MRF1`…`MRF12` |
 | Dimensão **Tempo** | Mensal, `YYYYMM` (ex.: `202601`…`202612`) |
 | Dimensão **Linha** (genérica, com propriedades) | Um membro por linha. **Decisão adotada no modelo real (`FOUND_EBITDA_EXPLANATIONS`): o ID do membro é o próprio rótulo da linha** (ex.: `Freight`), com a explicação na propriedade "Explanation EBITDA". **Premissa:** rótulos de linha globalmente únicos entre explicações. A alternativa com ID composto `<explicacao>|<linha>` (que dispensa a premissa) permanece válida caso rótulos repetidos venham a ser necessários — ver nota abaixo |
 | Medidas | `valor` e `kt` (volume, opcional — só linhas de preço) |

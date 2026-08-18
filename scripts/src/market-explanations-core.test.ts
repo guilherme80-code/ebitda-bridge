@@ -33,8 +33,13 @@ describe("scenarioIdDe", () => {
     expect(scenarioIdDe("MRF07", "FY26", 2, rotulo)).toBe("fy26_fy_mrf7");
     expect(scenarioIdDe("budget", "fy26", 2, rotulo)).toBe("fy26_fy_budget");
   });
+  it("aceita MRF1 até MRF12 e qualquer ano válido recebido do Databricks", () => {
+    expect(scenarioIdDe("MRF12", "203701", 2, rotulo)).toBe("fy37_m01_mrf12");
+    expect(scenarioIdDe("MRF01", "203712", 2, rotulo)).toBe("fy37_m12_mrf1");
+    expect(scenarioIdDe("Actual", "204012", 2, rotulo)).toBe("fy40_m12_actual");
+  });
   it("rejeita versão e período desconhecidos apontando a linha", () => {
-    expect(() => scenarioIdDe("MRF9", "FY26", 5, rotulo)).toThrow(/Linha 5.*versao desconhecida/);
+    expect(() => scenarioIdDe("MRF13", "FY26", 5, rotulo)).toThrow(/Linha 5.*versao desconhecida/);
     expect(() => scenarioIdDe("BUDGET", "S126", 7, rotulo)).toThrow(/Linha 7.*periodo desconhecido/);
   });
 

@@ -45,10 +45,10 @@ Princípios que valem para todo o fluxo:
   meses; classificação que muda entre meses interrompe a carga.
 - **Ordem de exibição** vem da dimensão (`sort_order`), obrigatória nas
   tabelas do Databricks.
-- Versões aceitas pelo APP: `ACTUAL`, `BUDGET`, `MRF1`…`MRF7` (a importação
-  normaliza `MRF01`→`MRF1` etc.). **Pendência conhecida:** o SAC já tem
-  `MRF08_2026`, mas o APP ainda não aceita MRF8+ — antes de carregar uma
-  versão além de MRF7 é preciso ampliar a lista de versões nos importadores.
+- Versões aceitas pelo APP: `ACTUAL`, `BUDGET`, `MRF1`…`MRF12` (a importação
+  normaliza `MRF01`→`MRF1` … `MRF09`→`MRF9`; `MRF10`…`MRF12` permanecem).
+  O ano não é fixado em `FY26`: períodos SAC/Databricks `YYYYMM` são aceitos
+  para qualquer ano dentro da validação do contrato (2000–2099).
 
 ---
 
@@ -62,7 +62,7 @@ Estrutura efetivamente criada no SAC:
 |---|---|---|
 | Dimensão de conta (keyfigures) | 10 contas: `cambio_brl_usd`, `cambio_custo_fixo_brl_usd`, `aco_bruto_kt`, `ebitda_kusd`, `participacao_custo_interno`, `quantidade_kt`, `montante_kusd`, `custo_variavel_kusd`, `preco_usd_t`, `fator_rendimento` | vira a coluna `indicador` |
 | Dimensão **`DBR_ITEM_EBITDA`** | 63 membros = 62 itens do APP + `Unassigned`; propriedades `Seção`, `Moeda`, `Atributo`, `Grupo`, `Ordenação` | vira a tabela de itens; `Unassigned` NÃO é extraído |
-| Dimensão **Version** | `Actual`, `BUDGET_2026`, `MRF07_2026`, `MRF08_2026`… com **propriedade "Versão"** = de-para para o APP (`BUDGET_2026`→`BUDGET`, `MRF07_2026`→`MRF7`; `Actual`→`ACTUAL`) | a coluna `versao` extraída é a **propriedade**, nunca o ID do membro |
+| Dimensão **Version** | `Actual`, `BUDGET_2026`, `MRF07_2026`, `MRF08_2026`…`MRF12_2026` com **propriedade "Versão"** = de-para para o APP (`BUDGET_2026`→`BUDGET`, `MRF07_2026`→`MRF7`, `MRF12_2026`→`MRF12`; `Actual`→`ACTUAL`) | a coluna `versao` extraída é a **propriedade**, nunca o ID do membro |
 | Dimensão **Date** | mensal, `YYYYMM` | vira `periodo` |
 | **`DBR_MOEDA`** | membro único `USD` | técnica — fixar/ignorar |
 | **`DBR_EMPRESA`** | membro único `BMJF` | técnica — fixar/ignorar |
@@ -103,9 +103,9 @@ Others.
    único membro cada. `DBR_MOEDA` e `DBR_EMPRESA` têm membro único, mas devem
    igualmente ficar fora das colunas extraídas.
 2. **`versao` = propriedade "Versão" da dimensão Version** (de-para
-   `BUDGET_2026`→`BUDGET` etc.), nunca o ID do membro. Versões sem de-para
-   válido no APP (ex.: `MRF08_2026` enquanto MRF8 não for aceito) ficam fora
-   da extração.
+   `BUDGET_2026`→`BUDGET`, `MRF08_2026`→`MRF8` etc.), nunca o ID do membro.
+   O de-para deve resultar em `ACTUAL`, `BUDGET` ou `MRF1`…`MRF12`; qualquer
+   outra versão fica fora da extração.
 3. **`periodo` = Date em `YYYYMM`** (ex.: `202601`), só meses.
 4. **`sort_order`** vem da propriedade de ordenação da dimensão e é
    obrigatória nas tabelas de dimensão do Databricks.
@@ -175,7 +175,7 @@ Validações que abortam a carga (mensagens típicas):
 
 | Situação | Mensagem típica |
 |---|---|
-| versão fora da lista | `versão inválida "MRF8"` (lista aceita: ACTUAL, BUDGET, MRF1…MRF7) |
+| versão fora da lista | `versão inválida "MRF13"` (lista aceita: ACTUAL, BUDGET, MRF1…MRF12) |
 | período não mensal / formato inválido | período rejeitado (aceitos: `YYYYMM` mês 01–12, ano 2000–2099; legado `JAN26`…) |
 | item da fato fora da dimensão | item desconhecido — a dimensão é a fonte da verdade |
 | propriedade em conflito (fato × dimensão, ou item com classificação diferente entre linhas) | conflito de propriedade interrompe a carga |
@@ -240,9 +240,10 @@ MRF7   + 202607  →  fy26_m07_mrf7     (label "JUL26 MRF7")
 Regra: `fy{AA}_m{MM}_{versao minúscula}`; ordenação do seletor
 `10000 + (índice da versão + 1) × 100 + (mês − 1)`. Internamente
 `scenarios.period` guarda o formato de exibição `JAN26`; o `YYYYMM` existe só
-no contrato externo. O catálogo tem uma linha por versão × mês: com as 9
-versões aceitas (ACTUAL, BUDGET, MRF1…MRF7) × 12 meses são até 108 cenários
-mensais; a base atual contém 96 (8 versões carregadas × 12 meses).
+no contrato externo. O catálogo tem uma linha por versão × mês: com as 14
+versões aceitas (ACTUAL, BUDGET, MRF1…MRF12) × 12 meses são até 168 cenários
+mensais. A quantidade efetiva depende das versões/meses recebidos do
+Databricks.
 
 ### 4.2 Derivação de FY e trimestres (indicadores)
 
@@ -324,9 +325,8 @@ origem ↔ mês i do destino), calcula cada mês e:
    dois modelos; conferir que novos itens/linhas ganharam propriedades e
    Ordenação.
 2. **Extração**: rodar a extração SAC → Databricks com os filtros técnicos
-   (`DBR_AUDITORIA`/`DBR_VTYPE` em um membro) e o de-para de versão pela
-   propriedade "Versão"; excluir versões não aceitas pelo APP (MRF8+ por
-   enquanto).
+    (`DBR_AUDITORIA`/`DBR_VTYPE` em um membro) e o de-para de versão pela
+    propriedade "Versão"; carregar somente `ACTUAL`, `BUDGET` e `MRF1`–`MRF12`.
 3. **Modelo 1**: `import-databricks <fato> <itens>`; em erro, corrigir o
    registro apontado e repetir (nada parcial é gravado).
 4. **Modelo 2**: exportar as três tabelas para `.xlsx` (Linhas ordenadas por
@@ -342,8 +342,6 @@ origem ↔ mês i do destino), calcula cada mês e:
 
 ## Pendências conhecidas (resumo)
 
-- **MRF8+**: o APP aceita só até MRF7; `MRF08_2026` do SAC deve ficar fora
-  das extrações até a lista ser ampliada.
 - **Modelo 2 sem importador Databricks direto**: caminho via Excel (seção
   3.2).
 - **ID de linha = rótulo puro no SAC**: exige rótulos globalmente únicos

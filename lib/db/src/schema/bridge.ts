@@ -10,7 +10,7 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-// A scenario is an independent version (BUDGET, MRF1..MRF7) within a period.
+// A scenario is an independent version (BUDGET, MRF1..MRF12) within a period.
 // Periods have a granularity kind: "year" (FY26), "quarter" (Q126) or
 // "month" (JAN26). Only scenarios of the same kind can be compared.
 export const scenariosTable = pgTable("scenarios", {

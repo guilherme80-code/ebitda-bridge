@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { asc, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import {
   db,
   scenariosTable,
@@ -69,9 +69,11 @@ import { computeBridge, type RawScenarioData } from "../lib/bridge-calc";
 import {
   deriveScenarios,
   aggregateMonths,
+  compareScenarios,
   monthPeriodLabel,
   type DerivedScenario,
 } from "../lib/aggregate";
+import { defaultScenarioPair } from "../lib/scenario-catalog";
 
 const router: IRouter = Router();
 
@@ -87,8 +89,8 @@ function firstStr(v: unknown): string | undefined {
 }
 
 export async function loadCatalog() {
-  const [scenarios, dims, facts] = await Promise.all([
-    db.select().from(scenariosTable).orderBy(asc(scenariosTable.sortOrder)),
+  const [loadedScenarios, dims, facts] = await Promise.all([
+    db.select().from(scenariosTable),
     db.select().from(dimItemsTable),
     db
       .select({
@@ -99,6 +101,7 @@ export async function loadCatalog() {
       })
       .from(indicatorFactsTable),
   ]);
+  const scenarios = loadedScenarios.sort(compareScenarios);
   // Um cenário "tem dados" quando existem parâmetros completos E linhas de
   // vendas — evita calcular um bridge enganoso a partir de importação parcial
   // (o plug de estoque fecharia a ponte mesmo faltando dados brutos).
@@ -113,24 +116,8 @@ export async function loadCatalog() {
     derivedById.set(d.id, d);
     if (d.monthIds.every((id) => withData.has(id))) withData.add(d.id);
   }
-  const all = [...derived, ...scenarios.filter((s) => s.periodKind === "month")].sort(
-    (a, b) => a.sortOrder - b.sortOrder,
-  );
+  const all = [...derived, ...scenarios.filter((s) => s.periodKind === "month")].sort(compareScenarios);
   return { scenarios: all, withData, derivedById };
-}
-
-function defaultPair(scenarios: Scenario[], withData: Set<string>) {
-  // Preferência: par real FY26 Budget → FY26 MRF7; senão, primeiro/último
-  // cenário anual com dados.
-  const preferred = ["fy26_fy_budget", "fy26_fy_mrf7"];
-  if (preferred.every((id) => withData.has(id))) {
-    return { sourceId: preferred[0], targetId: preferred[1] };
-  }
-  const years = scenarios.filter(
-    (s) => s.periodKind === "year" && withData.has(s.id),
-  );
-  if (years.length < 2) return undefined;
-  return { sourceId: years[0].id, targetId: years[years.length - 1].id };
 }
 
 /** Carrega os dados brutos (vendas, custo fixo, insumos, misc) de um cenário. */
@@ -151,7 +138,7 @@ async function loadRaw(ids: string[]): Promise<Map<string, RawScenarioData>> {
  */
 async function resolvePair(sourceId?: string, targetId?: string) {
   const { scenarios, withData, derivedById } = await loadCatalog();
-  const def = defaultPair(scenarios, withData);
+  const def = defaultScenarioPair(scenarios, withData);
   if (!def) return undefined;
 
   const effectiveSource = sourceId ?? def.sourceId;
@@ -213,7 +200,7 @@ function scenarioColumns<T extends { key: string; label: string }>(
 
 router.get("/scenarios", async (_req, res): Promise<void> => {
   const { scenarios, withData, derivedById } = await loadCatalog();
-  const def = defaultPair(scenarios, withData);
+  const def = defaultScenarioPair(scenarios, withData);
   if (!def) {
     res.status(404).json({ error: "No scenario data imported" });
     return;

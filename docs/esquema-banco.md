@@ -30,7 +30,7 @@ erDiagram
 
     scenarios {
         text id PK "fy26_m01_budget"
-        text version "BUDGET, MRF1..MRF7, ACTUAL"
+        text version "BUDGET, MRF1..MRF12, ACTUAL"
         text period "JAN26, Q126, FY26"
         text period_kind "month | quarter | year"
         text label
@@ -88,7 +88,7 @@ Catálogo de cenários. Um cenário = uma versão dentro de um período.
 | Coluna | Tipo | Regras |
 |---|---|---|
 | `id` | text | **PK**. Padrão `fy26_m01_budget` (mensal), `fy26_q1_mrf3` (trimestre), `fy26_fy_budget` (ano) |
-| `version` | text | `ACTUAL`, `BUDGET`, `MRF1`…`MRF7` |
+| `version` | text | `ACTUAL`, `BUDGET`, `MRF1`…`MRF12` |
 | `period` | text | `JAN26`…`DEC26`, `Q126`…`Q426`, `FY26` |
 | `period_kind` | text | `month` \| `quarter` \| `year` |
 | `label` | text | Rótulo de exibição |

@@ -195,12 +195,18 @@ describe("aggregateMonths — ponderações", () => {
 });
 
 describe("deriveScenarios", () => {
-  const mk = (mm: number, vi: number, vSlug: string, vLabel: string): Scenario => ({
-    id: `fy26_m${String(mm).padStart(2, "0")}_${vSlug}`,
+  const mk = (
+    mm: number,
+    vi: number,
+    vSlug: string,
+    vLabel: string,
+    yy = "26",
+  ): Scenario => ({
+    id: `fy${yy}_m${String(mm).padStart(2, "0")}_${vSlug}`,
     version: vSlug.toUpperCase(),
-    period: `M${mm}26`,
+    period: `M${mm}${yy}`,
     periodKind: "month",
-    label: `M${mm}26 ${vLabel}`,
+    label: `M${mm}${yy} ${vLabel}`,
     sortOrder: 10000 + (vi + 1) * 100 + (mm - 1),
   });
 
@@ -214,7 +220,7 @@ describe("deriveScenarios", () => {
       "fy26_q3_budget",
       "fy26_q4_budget",
     ]);
-    expect(derived[0].sortOrder).toBe(1); // vi reconstruído da ordenação mensal
+    expect(derived[0].sortOrder).toBeLessThan(derived[1].sortOrder);
     expect(derived[0].monthIds).toHaveLength(12);
 
     // Com meses faltando, os derivados continuam listados — monthIds sempre
@@ -244,6 +250,25 @@ describe("deriveScenarios", () => {
     const q3 = derived.find((d) => d.id === "fy26_q3_actual")!;
     expect(q3.monthIds).toEqual(["fy26_m07_actual", "fy26_m08_actual", "fy26_m09_actual"]);
     expect(q3.monthIds.map(monthPeriodLabel)).toEqual(["JUL26", "AUG26", "SEP26"]);
+  });
+
+  it("ordena cenários derivados por ano antes da versão, mesmo com dois anos carregados", () => {
+    // Se a ordenação usar apenas a versão, Budget do ano seguinte aparece
+    // antes de MRF12 do ano anterior. O catálogo deve sempre ser cronológico.
+    const months = [
+      ...Array.from({ length: 12 }, (_, i) => mk(i + 1, 12, "mrf12", "MRF12", "26")),
+      ...Array.from({ length: 12 }, (_, i) => mk(i + 1, 1, "budget", "Budget", "37")),
+    ];
+    const derived = deriveScenarios(months);
+    expect(derived.slice(0, 5).map((s) => s.id)).toEqual([
+      "fy26_fy_mrf12",
+      "fy26_q1_mrf12",
+      "fy26_q2_mrf12",
+      "fy26_q3_mrf12",
+      "fy26_q4_mrf12",
+    ]);
+    expect(derived.slice(5).every((s) => s.id.startsWith("fy37_"))).toBe(true);
+    expect(derived[0].sortOrder).toBeLessThan(derived[5].sortOrder);
   });
 
   it("monthPeriodLabel converte id mensal em período (e devolve o id quando não reconhece)", () => {

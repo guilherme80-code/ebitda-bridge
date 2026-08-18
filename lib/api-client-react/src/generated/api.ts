@@ -156,7 +156,7 @@ export const getListScenariosUrl = () => {
 }
 
 /**
- * Returns all versions (BUDGET, MRF1..MRF7) with a flag indicating whether imported data exists, plus the default comparison pair. Any two versions with data can be compared; the bridge is computed on the fly.
+ * Returns all versions (ACTUAL, BUDGET, MRF1..MRF12) with a flag indicating whether imported data exists, plus the default comparison pair. Any two versions with data can be compared; the bridge is computed on the fly.
  * @summary List available scenarios (version + period)
  */
 export const listScenarios = async ( options?: Parameters<typeof customFetch>[1]): Promise<ScenarioCatalog> => {

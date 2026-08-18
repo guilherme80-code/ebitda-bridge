@@ -85,12 +85,12 @@ export const ScenarioPeriodKind = {
 } as const;
 
 /**
- * A scenario is a combination of version (e.g. Budget, MRF7) and period (e.g. FY26).
+ * A scenario is a combination of version (e.g. Budget, MRF12) and period (e.g. FY26 or another received year).
  */
 export interface Scenario {
   /** Stable identifier (e.g. fy26_budget). */
   id: string;
-  /** Version name (e.g. Budget, MRF7). */
+  /** Version name (e.g. Budget, MRF12). */
   version: string;
   /** Period (e.g. FY26, FY26 Q1, FY26 Jan). */
   period: string;
