@@ -2,7 +2,8 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./lib/seed";
 
-const rawPort = process.env["PORT"];
+const rawPort = process.env["PORT"] || process.env["API_PORT"] ||
+  (process.env.NODE_ENV !== "production" ? "3000" : undefined);
 
 if (!rawPort) {
   throw new Error(

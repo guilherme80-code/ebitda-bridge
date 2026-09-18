@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "hello": "tsx ./src/hello.ts",
-    "export-indicadores": "tsx ./src/export-indicadores.ts",
-    "import-indicadores": "tsx ./src/import-indicadores.ts",
-    "import-databricks": "tsx ./src/import-databricks.ts",
+    "hello": "node --env-file-if-exists=../.env --import tsx ./src/hello.ts",
+    "export-indicadores": "node --env-file-if-exists=../.env --import tsx ./src/export-indicadores.ts",
+    "import-indicadores": "node --env-file-if-exists=../.env --import tsx ./src/import-indicadores.ts",
+    "import-databricks": "node --env-file-if-exists=../.env --import tsx ./src/import-databricks.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "import-market-explanations": "tsx ./src/import-market-explanations.ts",
-    "export-market-explanations": "tsx ./src/export-market-explanations.ts",
+    "import-market-explanations": "node --env-file-if-exists=../.env --import tsx ./src/import-market-explanations.ts",
+    "export-market-explanations": "node --env-file-if-exists=../.env --import tsx ./src/export-market-explanations.ts",
     "test": "vitest run"
   },
   "devDependencies": {

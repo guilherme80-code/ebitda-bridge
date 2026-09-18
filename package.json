@@ -9,6 +9,10 @@
   },
   "scripts": {
     "preinstall": "node ./scripts/check-package-manager.mjs",
+    "dev": "pnpm --parallel --filter @workspace/api-server --filter @workspace/bridge-ebitda run dev",
+    "dev:api": "pnpm --filter @workspace/api-server run dev",
+    "dev:web": "pnpm --filter @workspace/bridge-ebitda run dev",
+    "test": "node ./scripts/test.mjs",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
